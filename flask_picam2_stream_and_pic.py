@@ -7,7 +7,7 @@ from threading import Condition
 from datetime import datetime
 import cv2
 import os
-
+from libcamera import controls as libcontrols
 
 app = Flask(__name__)
 
@@ -34,14 +34,31 @@ class StreamingOutput(io.BufferedIOBase):
             self.frame = buf
             self.condition.notify_all()
 
+
 picam2 = Picamera2()
 
-#main={"size": (1280, 720), "format": "RGB888"}
+# main={"size": (1280, 720), "format": "RGB888"}
 video_config = picam2.create_video_configuration(main={"size": (1640, 1232), "format": "RGB888"},
                                                  lores={"size": (640, 480), "format": "YUV420"},
                                                  raw={"size": (3280, 2464)})
 
+initial_controls = {
+    "AwbEnable": True,
+    "AeEnable": True
+    # "AeExposureMode": libcontrols.AeExposureModeEnum.Normal,
+    #"FrameDurationLimits": (33333, 1000000)
+}
+
+picam2.set_controls(initial_controls)
+
+print("initial controls config: \n")
+print(picam2.camera_controls)
+
 picam2.configure(video_config)
+
+# Try with "AeEnable": False, in set controls to see if it can be modified on the go without having to stop the camera
+# picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
+
 
 encoder1 = H264Encoder(10000000)
 encoder2 = MJPEGEncoder(10000000)
@@ -52,9 +69,11 @@ lores_output = StreamingOutput()
 picam2.start_recording(encoder1, FileOutput(output))
 picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
 
+
 @app.route('/')
 def index():
     return PAGE.format(url_for('stream'))
+
 
 @app.route('/stream')
 def stream():
@@ -65,10 +84,11 @@ def stream():
             frame_encoded = cv2.imencode('.jpg', rgb)[1].tobytes()  # Encode as JPEG
 
             yield (b'--FRAME\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + frame_encoded + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_encoded + b'\r\n')
 
     return Response(generate(),
                     mimetype='multipart/x-mixed-replace; boundary=FRAME')
+
 
 @app.route('/save_pic')
 def save_pic():
@@ -76,7 +96,6 @@ def save_pic():
     if not os.path.exists('static'):
         os.makedirs('static')
 
-    #picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
     request = picam2.capture_request()
     img_name = datetime.now().strftime("static/" + "%d-%m-%Y_%H-%M-%S.jpg")
     request.save("main", img_name)
@@ -85,6 +104,7 @@ def save_pic():
 
     # Return the image itself to the browser
     return send_file(img_name, mimetype='image/jpeg')
+
 
 @app.route('/take_pic')
 def take_pic():
@@ -100,6 +120,70 @@ def take_pic():
     # Return the byte array directly to the browser
     return send_file(img_buffer, mimetype='image/jpeg')
 
+
+@app.route('/controls')
+def show_controls():
+    # Capture the metadata from the camera
+    metadata = picam2.capture_metadata()
+
+    # Print the entire metadata
+    print(metadata)
+    print(picam2.camera_controls)
+
+    # Return the metadata as a string to the browser
+    return str(metadata) + '\n\n\n' + str(picam2.camera_controls)
+
+
+@app.route('/set_controls/<int:exposure_time>')
+def set_controls(exposure_time):
+    # WARNING: If a really high exposure value is passed (say 3000 up more or less) then the camera is not able to
+    # go back to normal after it has been reset
+
+    # Create a dictionary with the desired controls
+    controls = {
+        "AwbEnable": False,
+        "AeEnable": False,
+        # "AeExposureMode": libcontrols.AeExposureModeEnum.Long,
+        # "FrameDurationLimits": (40000, exposure_time),
+        "ExposureTime": exposure_time,
+        "AnalogueGain": 8,
+        "ColourGains": (2, 1.81)
+    }
+
+    # Set the controls on the camera
+    picam2.set_controls(controls)
+
+    # with picam2.controls as ctrl:
+    #    ctrl.AnalogueGain = 6.0
+    #    ctrl.ExposureTime = 6000000
+
+    # Print the controls to the console for confirmation
+    print(f"Controls set to: {controls}")
+
+    # Return the controls as a string to the browser for feedback
+    return str(controls)
+
+
+@app.route('/reset')
+def reset():
+    # Set the controls on the camera
+    picam2.set_controls(initial_controls)
+
+    return str(initial_controls)
+
+@app.route('/activate_long_exposure_mode')
+def activate_long_exposure_mode():
+    # Create a dictionary with the desired controls
+    controls = {
+        # "AwbEnable": False,
+        "AeEnable": True,
+        "AeExposureMode": libcontrols.AeExposureModeEnum.Long
+    }
+
+    # Set the controls on the camera
+    picam2.set_controls(controls)
+
+    return str(controls)
 
 
 if __name__ == '__main__':
