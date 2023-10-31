@@ -171,6 +171,20 @@ def reset():
 
     return str(initial_controls)
 
+@app.route('/activate_long_exposure_mode')
+def activate_long_exposure_mode():
+    # Create a dictionary with the desired controls
+    controls = {
+        # "AwbEnable": False,
+        "AeEnable": True,
+        "AeExposureMode": libcontrols.AeExposureModeEnum.Long
+    }
+
+    # Set the controls on the camera
+    picam2.set_controls(controls)
+
+    return str(controls)
+
 
 if __name__ == '__main__':
     try:
