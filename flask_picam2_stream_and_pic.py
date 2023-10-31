@@ -7,6 +7,7 @@ from threading import Condition
 from datetime import datetime
 import cv2
 import os
+from libcamera import controls as libcontrols
 
 
 app = Flask(__name__)
@@ -43,6 +44,10 @@ video_config = picam2.create_video_configuration(main={"size": (1640, 1232), "fo
 
 picam2.configure(video_config)
 
+#Try with "AeEnable": False, in set controls to see if it can be modified on the go without having to stop the camera
+# picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
+
+
 encoder1 = H264Encoder(10000000)
 encoder2 = MJPEGEncoder(10000000)
 
@@ -76,7 +81,6 @@ def save_pic():
     if not os.path.exists('static'):
         os.makedirs('static')
 
-    #picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
     request = picam2.capture_request()
     img_name = datetime.now().strftime("static/" + "%d-%m-%Y_%H-%M-%S.jpg")
     request.save("main", img_name)
@@ -100,6 +104,65 @@ def take_pic():
     # Return the byte array directly to the browser
     return send_file(img_buffer, mimetype='image/jpeg')
 
+@app.route('/controls')
+def show_controls():
+    # Capture the metadata from the camera
+    metadata = picam2.capture_metadata()
+
+    # Print the entire metadata
+    print(metadata)
+    print(picam2.camera_controls)
+
+    # Return the metadata as a string to the browser
+    return str(metadata)
+
+
+@app.route('/set_controls/<int:exposure_time>')
+def set_controls(exposure_time):
+    # Create a dictionary with the desired controls
+    controls = {
+        "AwbEnable": 0,
+        "AeEnable": False,
+        "AeExposureMode": libcontrols.AeExposureModeEnum.Long,
+        "FrameDurationLimits": (40000, exposure_time),
+        "ExposureTime": exposure_time,
+        "AnalogueGain": 8,
+        "ColourGains": (2, 1.81)
+    }
+
+    # Set the controls on the camera
+    picam2.set_controls(controls)
+
+    # So far it needs to stop recording in order for the changes to take effect
+    picam2.stop_recording()
+
+    picam2.create_video_configuration(controls=controls)
+
+    picam2.start_recording(encoder1, FileOutput(output))
+    picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
+
+    #with picam2.controls as ctrl:
+    #    ctrl.AnalogueGain = 6.0
+    #    ctrl.ExposureTime = 6000000
+
+    # Print the controls to the console for confirmation
+    print(f"Controls set to: {controls}")
+
+    # Return the controls as a string to the browser for feedback
+    return str(controls)
+
+
+@app.route('/reset')
+def reset():
+    #
+    picam2.stop_recording()
+
+    # Not taking effect, need to have the picam2 controls set to defaults
+
+    picam2.start_recording(encoder1, FileOutput(output))
+    picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
+
+    return "camera reseted"
 
 
 if __name__ == '__main__':
