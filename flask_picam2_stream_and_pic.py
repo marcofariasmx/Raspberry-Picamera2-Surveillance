@@ -9,7 +9,6 @@ import cv2
 import os
 from libcamera import controls as libcontrols
 
-
 app = Flask(__name__)
 
 PAGE = """
@@ -35,16 +34,29 @@ class StreamingOutput(io.BufferedIOBase):
             self.frame = buf
             self.condition.notify_all()
 
+
 picam2 = Picamera2()
 
-#main={"size": (1280, 720), "format": "RGB888"}
+# main={"size": (1280, 720), "format": "RGB888"}
 video_config = picam2.create_video_configuration(main={"size": (1640, 1232), "format": "RGB888"},
                                                  lores={"size": (640, 480), "format": "YUV420"},
                                                  raw={"size": (3280, 2464)})
 
+initial_controls = {
+    "AwbEnable": True,
+    "AeEnable": True
+    # "AeExposureMode": libcontrols.AeExposureModeEnum.Normal,
+    #"FrameDurationLimits": (33333, 1000000)
+}
+
+picam2.set_controls(initial_controls)
+
+print("initial controls config: \n")
+print(picam2.camera_controls)
+
 picam2.configure(video_config)
 
-#Try with "AeEnable": False, in set controls to see if it can be modified on the go without having to stop the camera
+# Try with "AeEnable": False, in set controls to see if it can be modified on the go without having to stop the camera
 # picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
 
 
@@ -57,9 +69,11 @@ lores_output = StreamingOutput()
 picam2.start_recording(encoder1, FileOutput(output))
 picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
 
+
 @app.route('/')
 def index():
     return PAGE.format(url_for('stream'))
+
 
 @app.route('/stream')
 def stream():
@@ -70,10 +84,11 @@ def stream():
             frame_encoded = cv2.imencode('.jpg', rgb)[1].tobytes()  # Encode as JPEG
 
             yield (b'--FRAME\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + frame_encoded + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_encoded + b'\r\n')
 
     return Response(generate(),
                     mimetype='multipart/x-mixed-replace; boundary=FRAME')
+
 
 @app.route('/save_pic')
 def save_pic():
@@ -90,6 +105,7 @@ def save_pic():
     # Return the image itself to the browser
     return send_file(img_name, mimetype='image/jpeg')
 
+
 @app.route('/take_pic')
 def take_pic():
     # Request a capture
@@ -104,6 +120,7 @@ def take_pic():
     # Return the byte array directly to the browser
     return send_file(img_buffer, mimetype='image/jpeg')
 
+
 @app.route('/controls')
 def show_controls():
     # Capture the metadata from the camera
@@ -114,17 +131,20 @@ def show_controls():
     print(picam2.camera_controls)
 
     # Return the metadata as a string to the browser
-    return str(metadata)
+    return str(metadata) + '\n\n\n' + str(picam2.camera_controls)
 
 
 @app.route('/set_controls/<int:exposure_time>')
 def set_controls(exposure_time):
+    # WARNING: If a really high exposure value is passed (say 3000 up more or less) then the camera is not able to
+    # go back to normal after it has been reset
+
     # Create a dictionary with the desired controls
     controls = {
-        "AwbEnable": 0,
+        "AwbEnable": False,
         "AeEnable": False,
-        "AeExposureMode": libcontrols.AeExposureModeEnum.Long,
-        "FrameDurationLimits": (40000, exposure_time),
+        # "AeExposureMode": libcontrols.AeExposureModeEnum.Long,
+        # "FrameDurationLimits": (40000, exposure_time),
         "ExposureTime": exposure_time,
         "AnalogueGain": 8,
         "ColourGains": (2, 1.81)
@@ -133,15 +153,7 @@ def set_controls(exposure_time):
     # Set the controls on the camera
     picam2.set_controls(controls)
 
-    # So far it needs to stop recording in order for the changes to take effect
-    picam2.stop_recording()
-
-    picam2.create_video_configuration(controls=controls)
-
-    picam2.start_recording(encoder1, FileOutput(output))
-    picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
-
-    #with picam2.controls as ctrl:
+    # with picam2.controls as ctrl:
     #    ctrl.AnalogueGain = 6.0
     #    ctrl.ExposureTime = 6000000
 
@@ -154,15 +166,10 @@ def set_controls(exposure_time):
 
 @app.route('/reset')
 def reset():
-    #
-    picam2.stop_recording()
+    # Set the controls on the camera
+    picam2.set_controls(initial_controls)
 
-    # Not taking effect, need to have the picam2 controls set to defaults
-
-    picam2.start_recording(encoder1, FileOutput(output))
-    picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
-
-    return "camera reseted"
+    return str(initial_controls)
 
 
 if __name__ == '__main__':
