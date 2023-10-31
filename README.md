@@ -9,8 +9,10 @@ Environment conditions:
 
 -Python 3.11.2
 
+-Picamera module v2
 
 
+-------------------------
 Install with:
 
 chmod +x install.sh
