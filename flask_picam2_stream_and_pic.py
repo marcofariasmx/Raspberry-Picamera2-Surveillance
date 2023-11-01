@@ -235,7 +235,7 @@ def measure_brightness(image_path):
 
 # Constants (in microseconds)
 MAX_EXPOSURE_TIME = 10000000
-MIN_EXPOSURE_TIME = 10000
+MIN_EXPOSURE_TIME = 100000
 EXPOSURE_INCREMENT = 50000
 DEFAULT_EXPOSURE_TIME = 100000
 
@@ -263,6 +263,9 @@ def save_pic_every_minute():
 
         brightness = measure_brightness(full_path)
         print(f"Current brightness value: {brightness}")
+        print(f"Current exposure_time: {exposure_time}")
+
+        adjusted = False  # Flag to indicate if adjustments were made
 
         # Start increasing exposure_time when brightness is very low
         if brightness < LOW_BRIGHTNESS_THRESHOLD and not increasing_exposure:
@@ -288,28 +291,32 @@ def save_pic_every_minute():
         if increasing_exposure:
             if exposure_time < MAX_EXPOSURE_TIME:
                 exposure_time += EXPOSURE_INCREMENT
+                adjusted = True
                 print(f"Increased exposure_time to: {exposure_time}")
 
         elif decreasing_exposure:
-            if exposure_time > MIN_EXPOSURE_TIME + EXPOSURE_INCREMENT:
+            if exposure_time > MIN_EXPOSURE_TIME:
                 exposure_time -= EXPOSURE_INCREMENT
+                adjusted = True
                 print(f"Decreased exposure_time to: {exposure_time}")
 
         # Reset to daytime settings
-        elif brightness > DAY_BRIGHTNESS_THRESHOLD:
-            if exposure_time > MIN_EXPOSURE_TIME:
+        if brightness > DAY_BRIGHTNESS_THRESHOLD:
+            if exposure_time <= MIN_EXPOSURE_TIME:
                 print("Brightness indicates daylight. Resetting to daytime settings.")
                 reset()
 
-        controls = {
-            "AwbEnable": False,
-            "AeEnable": False,
-            "FrameDurationLimits": (MIN_EXPOSURE_TIME, exposure_time),
-            "ExposureTime": exposure_time,
-            "AnalogueGain": 8,
-            "ColourGains": (2, 1.81)
-        }
-        picam2.set_controls(controls)
+        if adjusted:
+            # Adjust the camera controls
+            controls = {
+                "AwbEnable": False,
+                "AeEnable": False,
+                "FrameDurationLimits": (MIN_EXPOSURE_TIME, exposure_time),
+                "ExposureTime": exposure_time,
+                "AnalogueGain": 8,
+                "ColourGains": (2, 1.81)
+            }
+            picam2.set_controls(controls)
 
         print(full_path + " SAVED!")
         time.sleep(60)  # Sleep for 60 seconds
