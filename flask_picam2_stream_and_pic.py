@@ -176,6 +176,8 @@ def reset():
     # Set the controls on the camera
     picam2.set_controls(initial_controls)
 
+    print("RESET triggered")
+
     return str(initial_controls)
 
 @app.route('/activate_long_exposure_mode')
@@ -224,17 +226,94 @@ def create_directory():
         os.makedirs(path)
     return path
 
+# Add this function to estimate the brightness of an image
+def measure_brightness(image_path):
+    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    _, _, v = cv2.split(hsv)
+    return v.mean()  # Return the average brightness
+
+# Constants (in microseconds)
+MAX_EXPOSURE_TIME = 10000000
+MIN_EXPOSURE_TIME = 10000
+EXPOSURE_INCREMENT = 50000
+DEFAULT_EXPOSURE_TIME = 100000
+
+# Brightness thresholds with hysteresis buffers
+LOW_BRIGHTNESS_THRESHOLD = 40
+BUFFER_LOW = 45
+HIGH_BRIGHTNESS_THRESHOLD = 60
+BUFFER_HIGH = 55
+DAY_BRIGHTNESS_THRESHOLD = 75
 
 def save_pic_every_minute():
+    exposure_time = DEFAULT_EXPOSURE_TIME
+
+    increasing_exposure = False
+    decreasing_exposure = False
+
     while True:
         path = create_directory()
         img_name = datetime.now().strftime("%H-%M-%S.jpg")
         full_path = os.path.join(path, img_name)
+
         request = picam2.capture_request()
         request.save("main", full_path)
         request.release()
+
+        brightness = measure_brightness(full_path)
+        print(f"Current brightness value: {brightness}")
+
+        # Start increasing exposure_time when brightness is very low
+        if brightness < LOW_BRIGHTNESS_THRESHOLD and not increasing_exposure:
+            print("Start increasing exposure_time due to low brightness.")
+            increasing_exposure = True
+            decreasing_exposure = False
+
+        # Stop increasing exposure_time when brightness surpasses buffer high
+        if brightness > BUFFER_HIGH:
+            increasing_exposure = False
+
+        # Start decreasing exposure_time when brightness is high
+        if brightness > HIGH_BRIGHTNESS_THRESHOLD and not decreasing_exposure:
+            print("Start decreasing exposure_time due to sufficient brightness.")
+            increasing_exposure = False
+            decreasing_exposure = True
+
+        # Stop decreasing exposure_time when brightness falls below buffer low
+        if brightness < BUFFER_LOW:
+            decreasing_exposure = False
+
+        # Adjust the exposure_time
+        if increasing_exposure:
+            if exposure_time < MAX_EXPOSURE_TIME:
+                exposure_time += EXPOSURE_INCREMENT
+                print(f"Increased exposure_time to: {exposure_time}")
+
+        elif decreasing_exposure:
+            if exposure_time > MIN_EXPOSURE_TIME + EXPOSURE_INCREMENT:
+                exposure_time -= EXPOSURE_INCREMENT
+                print(f"Decreased exposure_time to: {exposure_time}")
+
+        # Reset to daytime settings
+        elif brightness > DAY_BRIGHTNESS_THRESHOLD:
+            if exposure_time > MIN_EXPOSURE_TIME:
+                print("Brightness indicates daylight. Resetting to daytime settings.")
+                reset()
+
+        controls = {
+            "AwbEnable": False,
+            "AeEnable": False,
+            "FrameDurationLimits": (MIN_EXPOSURE_TIME, exposure_time),
+            "ExposureTime": exposure_time,
+            "AnalogueGain": 8,
+            "ColourGains": (2, 1.81)
+        }
+        picam2.set_controls(controls)
+
         print(full_path + " SAVED!")
-        time.sleep(60) # Sleep for 60 seconds
+        time.sleep(60)  # Sleep for 60 seconds
+
 
 if __name__ == '__main__':
     # Start the thread to save pictures every minute
