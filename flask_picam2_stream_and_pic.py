@@ -11,7 +11,7 @@ from libcamera import controls as libcontrols
 import time
 from threading import Thread
 
-#Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
+# Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
 
