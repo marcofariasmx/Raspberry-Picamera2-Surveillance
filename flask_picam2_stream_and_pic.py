@@ -1,4 +1,4 @@
-from flask import Flask, Response, url_for, send_file
+from flask import Flask, Response, url_for, send_file, render_template
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder, MJPEGEncoder, H264Encoder
 from picamera2.outputs import FileOutput
@@ -8,6 +8,8 @@ from datetime import datetime
 import cv2
 import os
 from libcamera import controls as libcontrols
+import time
+from threading import Thread
 
 app = Flask(__name__)
 
@@ -139,12 +141,17 @@ def set_controls(exposure_time):
     # WARNING: If a really high exposure value is passed (say 3000 up more or less) then the camera is not able to
     # go back to normal after it has been reset
 
+    if exposure_time > 10000000:
+        exposure_time = 10000000
+    elif exposure_time < 10000:
+        exposure_time = 10000
+
     # Create a dictionary with the desired controls
     controls = {
         "AwbEnable": False,
         "AeEnable": False,
         # "AeExposureMode": libcontrols.AeExposureModeEnum.Long,
-        # "FrameDurationLimits": (40000, exposure_time),
+        "FrameDurationLimits": (10000, exposure_time),
         "ExposureTime": exposure_time,
         "AnalogueGain": 8,
         "ColourGains": (2, 1.81)
@@ -186,7 +193,55 @@ def activate_long_exposure_mode():
     return str(controls)
 
 
+@app.route('/browse/')
+@app.route('/browse/<path:subpath>')
+def browse(subpath=""):
+    abs_path = os.path.join("static", subpath)
+
+    if os.path.isdir(abs_path):
+        items = sorted(os.listdir(abs_path))
+        return render_template('browse.html', items=items, subpath=subpath)
+    else:
+        dir_path, current_image = os.path.split(abs_path)
+        all_images = sorted([img for img in os.listdir(dir_path) if img.endswith(".jpg")])
+
+        try:
+            idx = all_images.index(current_image)
+            prev_image = all_images[idx - 1] if idx > 0 else None
+            next_image = all_images[idx + 1] if idx < len(all_images) - 1 else None
+        except ValueError:
+            prev_image = next_image = None
+
+        return render_template('image.html', image_path=abs_path,
+                               prev_image=os.path.join(dir_path, prev_image) if prev_image else None,
+                               next_image=os.path.join(dir_path, next_image) if next_image else None)
+
+
+def create_directory():
+    dir_name = datetime.now().strftime("%d-%m-%Y")
+    path = os.path.join('static', dir_name)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
+
+
+def save_pic_every_minute():
+    while True:
+        path = create_directory()
+        img_name = datetime.now().strftime("%H-%M-%S.jpg")
+        full_path = os.path.join(path, img_name)
+        request = picam2.capture_request()
+        request.save("main", full_path)
+        request.release()
+        print(full_path + " SAVED!")
+        time.sleep(60) # Sleep for 60 seconds
+
 if __name__ == '__main__':
+    # Start the thread to save pictures every minute
+    thread = Thread(target=save_pic_every_minute)
+    thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
+    thread.start()
+
     try:
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:

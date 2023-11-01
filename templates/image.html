@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Viewer</title>
+</head>
+<body>
+    <h1>Viewing: {{ image_path }}</h1>
+    <div style="text-align:center;">
+        {% if prev_image %}
+            <a href="{{ url_for('browse', subpath=prev_image[7:]) }}">&larr; Previous</a>
+        {% endif %}
+
+        <img src="{{ url_for('static', filename=image_path[7:]) }}" alt="Image" style="display:block; margin:0 auto;">
+
+        {% if next_image %}
+            <a href="{{ url_for('browse', subpath=next_image[7:]) }}">Next &rarr;</a>
+        {% endif %}
+    </div>
+</body>
+</html>
