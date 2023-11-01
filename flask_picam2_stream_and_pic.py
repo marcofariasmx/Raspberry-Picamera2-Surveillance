@@ -304,6 +304,7 @@ def save_pic_every_minute():
         if brightness > DAY_BRIGHTNESS_THRESHOLD:
             if exposure_time <= MIN_EXPOSURE_TIME:
                 print("Brightness indicates daylight. Resetting to daytime settings.")
+                #Todo: FIX this so that it only gets reset once
                 reset()
 
         if adjusted:
