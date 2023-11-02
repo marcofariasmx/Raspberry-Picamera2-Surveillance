@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Browser</title>
+</head>
+<body>
+    <h1>Browsing directory: {{ subpath }}</h1>
+    <ul>
+        {% for item in items %}
+            <li>
+                <a href="{{ url_for('browse', subpath=subpath + '/' + item) }}">{{ item }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
