@@ -6,13 +6,13 @@ It utilizes Python's Picamera2 library.
 
 Environment conditions:
 ----------------------
--Raspberry Pi Zero 2W
+-Raspberry Pi Zero 2W / Raspberry Pi 4 (8GB).
 
 -Raspberry Pi OS: Debian Bookworm 64 bit
 
 -Python 3.11.2
 
--Picamera module v2
+-Picamera module v2 / v3
 
 
 -------------------------
