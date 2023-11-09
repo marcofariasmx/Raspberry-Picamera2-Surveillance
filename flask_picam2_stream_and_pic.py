@@ -1,6 +1,8 @@
 from flask import Flask, Response, url_for, send_file, render_template
 from picamera2 import Picamera2
-from picamera2.encoders import JpegEncoder, MJPEGEncoder, H264Encoder
+#from picamera2.encoders import JpegEncoder
+#from picamera2.encoders import MJPEGEncoder
+from picamera2.encoders import H264Encoder
 from picamera2.outputs import FileOutput
 import io
 from threading import Condition
@@ -22,7 +24,7 @@ PAGE = """
 </head>
 <body>
 <h1>Picamera2 MJPEG Streaming Demo</h1>
-<img src="{}" width="1280" height="960">
+<img src="{}" width="1536" height="864">
 </body>
 </html>
 """
@@ -41,10 +43,18 @@ class StreamingOutput(io.BufferedIOBase):
 
 picam2 = Picamera2()
 
+full_resolution = picam2.sensor_resolution
+print("Sensor resolution: ")
+print(full_resolution)
+
 # main={"size": (1280, 720), "format": "RGB888"}
-video_config = picam2.create_video_configuration(main={"size": (1640, 1232), "format": "RGB888"},
-                                                 lores={"size": (640, 480), "format": "YUV420"},
-                                                 raw={"size": (3280, 2464)})
+video_config = picam2.create_video_configuration(main={"size": full_resolution, "format": "RGB888"},
+                                                 lores={"size": (640, 480)},
+                                                 encode="lores",
+                                                 buffer_count=8)    # Need to decrease this to 2-3 in the raspberry pi
+                                                                    # zero 2 w to avoid running out of memory when using
+                                                                    # the full sensor resolution, specially on the
+                                                                    # camera module 3.
 
 initial_controls = {
     "AwbEnable": True,
@@ -60,18 +70,11 @@ print(picam2.camera_controls)
 
 picam2.configure(video_config)
 
-# Try with "AeEnable": False, in set controls to see if it can be modified on the go without having to stop the camera
-# picam2.set_controls({"ExposureTime": 5000000, "AnalogueGain": 8, "ColourGains": (2, 1.81)})
-
-
-encoder1 = H264Encoder(10000000)
-encoder2 = MJPEGEncoder(10000000)
+encoder = H264Encoder()
 
 output = StreamingOutput()
-lores_output = StreamingOutput()
 
-picam2.start_recording(encoder1, FileOutput(output))
-picam2.start_recording(encoder2, FileOutput(lores_output), name="lores")
+picam2.start_recording(encoder, FileOutput(output))
 
 
 @app.route('/')
