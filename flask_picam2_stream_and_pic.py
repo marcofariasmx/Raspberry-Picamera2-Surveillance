@@ -11,11 +11,48 @@ import cv2
 import os
 from libcamera import controls as libcontrols
 import time
-from threading import Thread
+from threading import Thread, Lock
+import sys
 
 # Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
+
+class WatchdogTimer(Thread):
+    def __init__(self, timeout, reset_callback):
+        Thread.__init__(self)
+        self.timeout = timeout
+        self.reset_callback = reset_callback
+        self.last_heartbeat = time.time()
+        self.lock = Lock()
+        self.running = True
+        self.heartbeat_count = 0
+
+    def run(self):
+        while self.running:
+            with self.lock:
+                if time.time() - self.last_heartbeat > self.timeout:
+                    print("Watchdog triggered reset")
+                    self.reset_callback()
+                    self.last_heartbeat = time.time()
+            time.sleep(1)
+
+    def update_heartbeat(self):
+        with self.lock:
+            self.last_heartbeat = time.time()
+        self.heartbeat_count += 1
+        print("heartbeat updated..., count: ", str(self.heartbeat_count))
+
+    def stop(self):
+        self.running = False
+
+def reset_system():
+    print("Resetting the system...")
+    os.execv(sys.executable, ['python'] + sys.argv)
+
+watchdog_timeout = 60 * 3  # in seconds, adjust as needed
+watchdog = WatchdogTimer(watchdog_timeout, reset_system)
+watchdog.start()
 
 PAGE = """
 <html>
@@ -325,6 +362,9 @@ def save_pic_every_minute():
             picam2.set_controls(controls)
 
         print(full_path + " SAVED!")
+
+        watchdog.update_heartbeat()
+
         time.sleep(60)  # Sleep for 60 seconds
 
 
@@ -338,3 +378,4 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=8000, threaded=True)
     finally:
         picam2.stop_recording()
+        watchdog.stop()
