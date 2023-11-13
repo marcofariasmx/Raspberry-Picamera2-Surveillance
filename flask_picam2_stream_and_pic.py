@@ -128,6 +128,7 @@ def send_video_frames():
         try:
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((receiver_ip, port))
+            print(f"Connected to receiver at {receiver_ip}:{port}")
 
             while True:
                 yuv420 = picam2.capture_array("lores")
@@ -137,11 +138,12 @@ def send_video_frames():
                 client_socket.sendall(struct.pack("Q", len(frame)) + frame)
 
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
-            print(f"Connection error: {e}. Attempting to reconnect in 5 seconds...")
+            print(f"Connection lost: {e}. Attempting to reconnect in 5 seconds...")
             time.sleep(5)
         finally:
             if client_socket:
                 client_socket.close()
+                print(f"Disconnected from receiver at {receiver_ip}:{port}")
 
 
 thread = Thread(target=send_video_frames)
