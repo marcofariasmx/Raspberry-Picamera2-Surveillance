@@ -13,10 +13,18 @@ from libcamera import controls as libcontrols
 import time
 from threading import Thread, Lock
 import sys
+import socket
+import struct
+
 
 # Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
+
+# Connection parameters
+receiver_ip = '192.168.100.40'  # Replace with receiver's IP address
+port = 9999
+
 
 class WatchdogTimer(Thread):
     def __init__(self, timeout, reset_callback):
@@ -113,6 +121,32 @@ output = StreamingOutput()
 
 picam2.start_recording(encoder, FileOutput(output))
 
+
+# Function to send video frames continuously
+def send_video_frames():
+    while True:
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((receiver_ip, port))
+
+            while True:
+                yuv420 = picam2.capture_array("lores")
+                rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
+                _, buffer = cv2.imencode('.jpg', rgb)
+                frame = buffer.tobytes()
+                client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+
+        except (BrokenPipeError, ConnectionResetError, socket.error) as e:
+            print(f"Connection error: {e}. Attempting to reconnect in 5 seconds...")
+            time.sleep(5)
+        finally:
+            if client_socket:
+                client_socket.close()
+
+
+thread = Thread(target=send_video_frames)
+thread.daemon = True
+thread.start()
 
 @app.route('/')
 def index():
