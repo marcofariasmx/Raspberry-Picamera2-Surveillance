@@ -5,13 +5,15 @@ import cv2
 import numpy as np
 import struct
 
+# Todo: add some sort of logic to catch errors when aborted connection
+
 app = Flask(__name__)
 
 # Server setup for receiving frames
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 host_ip = '0.0.0.0'  # Listen on all available IPs
-port = 9999
+port = 5555
 server_socket.bind((host_ip, port))
 server_socket.listen()
 print("Listening for incoming connections on port", port)
