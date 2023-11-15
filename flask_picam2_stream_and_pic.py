@@ -1,4 +1,4 @@
-from flask import Flask, Response, url_for, send_file, render_template, request
+from flask import Flask, Response, url_for, send_file, render_template, request, jsonify
 from picamera2 import Picamera2
 #from picamera2.encoders import JpegEncoder
 #from picamera2.encoders import MJPEGEncoder
@@ -19,6 +19,11 @@ import requests
 from werkzeug.serving import ThreadedWSGIServer
 from socket import SOL_SOCKET, SO_REUSEADDR
 
+import Adafruit_DHT
+
+# Sensor setup
+DHT_SENSOR = Adafruit_DHT.DHT22
+DHT_PIN = 4  # GPIO pin number
 
 # Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
@@ -77,6 +82,8 @@ PAGE = """
 <body>
 <h1>Picamera2 MJPEG Streaming Demo</h1>
 <img src="{}" width="1536" height="864">
+<p>Temperature: {}°C</p>
+<p>Humidity: {}%</p>
 </body>
 </html>
 """
@@ -164,7 +171,13 @@ thread.start()
 
 @app.route('/')
 def index():
-    return PAGE.format(url_for('stream'))
+    return render_template('index.html', stream_url=url_for('stream'))
+
+
+@app.route('/sensor_data')
+def sensor_data():
+    data = read_sensor()
+    return jsonify(data)
 
 
 @app.route('/stream')
@@ -422,6 +435,14 @@ def save_pic_every_minute():
         watchdog.update_heartbeat()
 
         time.sleep(60)  # Sleep for 60 seconds
+
+
+def read_sensor():
+    humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
+    if humidity is not None and temperature is not None:
+        return {"temperature": temperature, "humidity": humidity}
+    else:
+        return {"temperature": "N/A", "humidity": "N/A"}
 
 
 if __name__ == '__main__':
