@@ -13,10 +13,18 @@ from libcamera import controls as libcontrols
 import time
 from threading import Thread, Lock
 import sys
+import socket
+import struct
+
 
 # Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
+
+# Connection parameters
+domain_name = 'marcofarias.com'
+port = 5555
+
 
 class WatchdogTimer(Thread):
     def __init__(self, timeout, reset_callback):
@@ -106,13 +114,45 @@ print("initial controls config: \n")
 print(picam2.camera_controls)
 
 picam2.configure(video_config)
-
 encoder = H264Encoder()
-
 output = StreamingOutput()
 
 picam2.start_recording(encoder, FileOutput(output))
 
+
+def send_video_frames():
+    """
+    Function to send video frames continuously
+    """
+    # Todo: try switching to UDP for faster data transfer and also send the pictures every 1 min alongside other data
+    while True:
+        try:
+            # Resolve domain name to IP address
+            receiver_ip = socket.gethostbyname(domain_name)
+
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((receiver_ip, port))
+            print(f"Connected to receiver at {receiver_ip}:{port}")
+
+            while True:
+                yuv420 = picam2.capture_array("lores")
+                rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
+                _, buffer = cv2.imencode('.jpg', rgb)
+                frame = buffer.tobytes()
+                client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+
+        except (BrokenPipeError, ConnectionResetError, socket.error) as e:
+            print(f"Connection lost: {e}. Attempting to reconnect in 5 seconds...")
+            time.sleep(5)
+        finally:
+            if client_socket:
+                client_socket.close()
+                print(f"Disconnected from receiver at {receiver_ip}:{port}")
+
+
+thread = Thread(target=send_video_frames)
+thread.daemon = True
+thread.start()
 
 @app.route('/')
 def index():
