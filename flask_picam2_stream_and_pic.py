@@ -1,4 +1,4 @@
-from flask import Flask, Response, url_for, send_file, render_template
+from flask import Flask, Response, url_for, send_file, render_template, request
 from picamera2 import Picamera2
 #from picamera2.encoders import JpegEncoder
 #from picamera2.encoders import MJPEGEncoder
@@ -15,6 +15,9 @@ from threading import Thread, Lock
 import sys
 import socket
 import struct
+import requests
+from werkzeug.serving import ThreadedWSGIServer
+from socket import SOL_SOCKET, SO_REUSEADDR
 
 
 # Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
@@ -56,6 +59,10 @@ class WatchdogTimer(Thread):
 
 def reset_system():
     print("Resetting the system...")
+    try:
+        requests.post('http://localhost:8000/shutdown')
+    except Exception as e:
+        print(f"Error during shutdown: {e}")
     os.execv(sys.executable, ['python'] + sys.argv)
 
 watchdog_timeout = 60 * 3  # in seconds, adjust as needed
@@ -142,8 +149,9 @@ def send_video_frames():
                 client_socket.sendall(struct.pack("Q", len(frame)) + frame)
 
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
-            print(f"Connection lost: {e}. Attempting to reconnect in 5 seconds...")
-            time.sleep(5)
+            sleep_time = 30
+            print(f"Connection lost: {e}. Attempting to reconnect in {sleep_time} seconds...")
+            time.sleep(sleep_time)
         finally:
             if client_socket:
                 client_socket.close()
@@ -301,6 +309,14 @@ def browse(subpath=""):
                                next_image=os.path.join(dir_path, next_image) if next_image else None)
 
 
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    shutdown_function = request.environ.get('werkzeug.server.shutdown')
+    if shutdown_function is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    shutdown_function()
+    return 'Server shutting down...'
+
 def create_directory():
     dir_name = datetime.now().strftime("%d-%m-%Y")
     path = os.path.join('static', dir_name)
@@ -414,8 +430,14 @@ if __name__ == '__main__':
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
 
+    # Create a server instance with threaded support
+    server = ThreadedWSGIServer('0.0.0.0', 8000, app)
+
+    # Set SO_REUSEADDR option
+    server.socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+
     try:
-        app.run(host='0.0.0.0', port=8000, threaded=True)
+        server.serve_forever()
     finally:
         picam2.stop_recording()
         watchdog.stop()
