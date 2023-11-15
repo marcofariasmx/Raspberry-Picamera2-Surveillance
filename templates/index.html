@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Picamera2 MJPEG Streaming Demo</title>
+    <script type="text/javascript">
+        function updateSensorData() {
+            fetch('/sensor_data')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('temperature').textContent = data.temperature + '°C';
+                    document.getElementById('humidity').textContent = data.humidity + '%';
+                })
+                .catch(error => console.error('Error fetching sensor data:', error));
+        }
+
+        // Update sensor data every 30 seconds
+        setInterval(updateSensorData, 30000);
+
+        // Update sensor data immediately when the page loads
+        document.addEventListener('DOMContentLoaded', updateSensorData);
+    </script>
+</head>
+<body>
+    <h1>Picamera2 MJPEG Streaming Demo</h1>
+    <img src="{{ stream_url }}" width="1536" height="864">
+    <p>Temperature: <span id="temperature">Loading...</span></p>
+    <p>Humidity: <span id="humidity">Loading...</span></p>
+</body>
+</html>
