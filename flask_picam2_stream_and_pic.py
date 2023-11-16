@@ -30,7 +30,9 @@ DHT_PIN = 4  # GPIO pin number
 app = Flask(__name__)
 
 # Connection parameters
+use_domain_name = True
 domain_name = 'marcofarias.com'
+ip_address = '192.168.100.10'
 port = 5555
 
 
@@ -142,7 +144,10 @@ def send_video_frames():
     while True:
         try:
             # Resolve domain name to IP address
-            receiver_ip = socket.gethostbyname(domain_name)
+            if use_domain_name:
+                receiver_ip = socket.gethostbyname(domain_name)
+            else:
+                receiver_ip = ip_address
 
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((receiver_ip, port))
