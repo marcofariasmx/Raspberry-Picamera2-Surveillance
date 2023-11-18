@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Streaming</title>
+</head>
+<body>
+    <h1>Video Stream</h1>
+    <!-- Assign an ID to the image for easy access in JavaScript -->
+    <img id="stream" src="{{ stream_url }}" alt="Video Stream">
+
+    <script>
+        // JavaScript function to update the image source
+        setInterval(function() {
+            var stream = document.getElementById('stream');
+            // Update the image source with a cache-busting query parameter
+            stream.src = "{{ stream_url }}?nocache=" + new Date().getTime();
+        }, 100);  // Adjust the interval as needed (here, it's set to update every 100 milliseconds)
+    </script>
+</body>
+</html>

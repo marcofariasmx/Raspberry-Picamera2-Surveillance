@@ -1,3 +1,4 @@
+import json
 from flask import Flask, Response, url_for, send_file, render_template, request, jsonify
 from picamera2 import Picamera2
 #from picamera2.encoders import JpegEncoder
@@ -33,8 +34,10 @@ app = Flask(__name__)
 use_domain_name = False
 domain_name = 'marcofarias.com'
 ip_address = '192.168.100.40'
+receiver_ip = ''
 port = 5555
-
+SENSOR_DATA_PORT = 5556
+HIGH_RES_PIC_PORT = 5557
 
 class WatchdogTimer(Thread):
     def __init__(self, timeout, reset_callback):
@@ -140,6 +143,7 @@ def send_video_frames():
     """
     Function to send video frames continuously
     """
+    global receiver_ip
     # Todo: try switching to UDP for faster data transfer and also send the pictures every 1 min alongside other data
     while True:
         try:
@@ -149,25 +153,20 @@ def send_video_frames():
             else:
                 receiver_ip = ip_address
 
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((receiver_ip, port))
-            print(f"Connected to receiver at {receiver_ip}:{port}")
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.connect((receiver_ip, port))
+                print(f"Connected to receiver at {receiver_ip}:{port}")
 
-            while True:
-                yuv420 = picam2.capture_array("lores")
-                rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
-                _, buffer = cv2.imencode('.jpg', rgb)
-                frame = buffer.tobytes()
-                client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+                while True:
+                    yuv420 = picam2.capture_array("lores")
+                    rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
+                    _, buffer = cv2.imencode('.jpg', rgb)
+                    frame = buffer.tobytes()
+                    client_socket.sendall(struct.pack("Q", len(frame)) + frame)
 
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
-            sleep_time = 30
-            print(f"Connection lost: {e}. Attempting to reconnect in {sleep_time} seconds...")
-            time.sleep(sleep_time)
-        finally:
-            if client_socket:
-                client_socket.close()
-                print(f"Disconnected from receiver at {receiver_ip}:{port}")
+            print(f"Connection lost: {e}. Attempting to reconnect...")
+            time.sleep(5)  # Wait before retrying
 
 
 thread = Thread(target=send_video_frames)
@@ -437,6 +436,23 @@ def save_pic_every_minute():
 
         print(full_path + " SAVED!")
 
+        # Send the high resolution picture
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
+                pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
+                # Capture and send the picture
+                img_buffer = io.BytesIO()
+                request = picam2.capture_request()
+                request.save("main", img_buffer, format='jpeg')
+                img_buffer.seek(0)
+                pic_data = img_buffer.read()
+                request.release()
+
+                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+                print("High-resolution picture sent.")
+        except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+            print(f"High-res picture connection lost: {e}. Retrying...")
+
         watchdog.update_heartbeat()
 
         time.sleep(60)  # Sleep for 60 seconds
@@ -449,12 +465,41 @@ def read_sensor():
     else:
         return {"temperature": "N/A", "humidity": "N/A"}
 
+def send_sensor_data():
+    while True:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
+                sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
+                while True:
+                    sensor_data = read_sensor()
+                    sensor_socket.sendall(json.dumps(sensor_data).encode())
+                    time.sleep(10)  # Adjust as needed for sensor data frequency
+        except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
+            print(f"Sensor data connection lost: {e}. Retrying...")
+            time.sleep(5)  # Wait before retrying
+def send_high_res_picture():
+    while True:
+        pic_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
+        try:
+            pic_path = ''#save_high_res_picture()
+            with open(pic_path, 'rb') as pic_file:
+                pic_data = pic_file.read()
+                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+        finally:
+            pic_socket.close()
+        time.sleep(60)  # Adjust for picture frequency
+
 
 if __name__ == '__main__':
     # Start the thread to save pictures every minute
     thread = Thread(target=save_pic_every_minute)
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
+
+    sensor_thread = Thread(target=send_sensor_data)
+    sensor_thread.daemon = True
+    sensor_thread.start()
 
     # Create a server instance with threaded support
     server = ThreadedWSGIServer('0.0.0.0', 8000, app)
