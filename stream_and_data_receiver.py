@@ -169,6 +169,14 @@ def get_latest_high_res_image():
     return None
 
 
+@app.route('/latest_image_url')
+def latest_image_url():
+    latest_image = get_latest_high_res_image()  # This function returns the latest image's relative path
+    if latest_image:
+        return url_for('static', filename=latest_image)
+    else:
+        return ''  # Return an empty string or a default image path if no image is found
+
 
 
 @app.route('/')
@@ -206,4 +214,5 @@ if __name__ == '__main__':
     threading.Thread(target=listen_for_connections, args=(SENSOR_DATA_PORT, handle_sensor_data)).start()
     threading.Thread(target=listen_for_connections, args=(HIGH_RES_PIC_PORT, handle_high_res_picture)).start()
 
+    # IF on debug mode, things get messy with threads and they stop working properly.
     app.run(host='0.0.0.0', port=5000, threaded=True)
