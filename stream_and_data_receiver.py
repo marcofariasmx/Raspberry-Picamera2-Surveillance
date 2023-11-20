@@ -1,3 +1,4 @@
+import datetime
 import json
 import time
 from flask import Flask, Response, url_for, render_template
@@ -8,6 +9,24 @@ import numpy as np
 import struct
 import os
 
+
+class SingleItemQueue:
+    def __init__(self):
+        self.item = None
+        self.lock = threading.Lock()
+
+    def put(self, item):
+        with self.lock:
+            self.item = item
+
+    def get(self):
+        with self.lock:
+            return self.item
+
+    def is_empty(self):
+        return self.item is None
+
+
 app = Flask(__name__)
 
 VIDEO_STREAM_PORT = 5555
@@ -15,7 +34,7 @@ SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
 # Global variables
-frame = None
+frame_queue = SingleItemQueue()
 sensor_data = {}
 lock = threading.Lock()
 
@@ -25,7 +44,6 @@ if not os.path.exists(HIGH_RES_IMAGES_DIR):
     os.makedirs(HIGH_RES_IMAGES_DIR)
 
 def handle_video_stream(client_socket):
-    global frame
     try:
         payload_size = struct.calcsize("Q")
         data = b""
@@ -48,6 +66,10 @@ def handle_video_stream(client_socket):
             with lock:
                 frame = np.frombuffer(frame_data, dtype=np.uint8)
                 frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+
+                if frame is not None:
+                    frame_queue.put(frame)
+
     except Exception as e:
         print(f"Video stream connection lost: {e}")
     finally:
@@ -60,8 +82,13 @@ def handle_sensor_data(client_socket):
             data = client_socket.recv(1024).decode()
             if not data: break
             sensor_data = json.loads(data)
-            print("Temperature: {}°C, Humidity: {}%".format(sensor_data.get('temperature', 'N/A'),
-                                                           sensor_data.get('humidity', 'N/A')))
+            temperature = sensor_data.get('temperature', 'N/A')
+            humidity = sensor_data.get('humidity', 'N/A')
+
+            temperature_str = "{:.2f}°C".format(temperature) if isinstance(temperature, (int, float)) else 'N/A'
+            humidity_str = "{:.2f}%".format(humidity) if isinstance(humidity, (int, float)) else 'N/A'
+
+            print("Temperature: {}, Humidity: {}".format(temperature_str, humidity_str))
     except Exception as e:
         print(f"Sensor data connection lost: {e}")
     finally:
@@ -89,7 +116,20 @@ def handle_high_res_picture(client_socket):
 
             image = np.frombuffer(frame_data, dtype=np.uint8)
             image = cv2.imdecode(image, cv2.IMREAD_COLOR)
-            image_path = os.path.join(HIGH_RES_IMAGES_DIR, 'high_res_image_{}.jpg'.format(threading.get_ident()))
+            # Current date and time
+            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+            current_time = datetime.datetime.now().strftime("%H-%M-%S")
+
+            # Create directory path for current date
+            date_directory = os.path.join(HIGH_RES_IMAGES_DIR, current_date)
+
+            # Make sure the directory exists
+            os.makedirs(date_directory, exist_ok=True)
+
+            # Define the full path for the image
+            image_path = os.path.join(date_directory, f'{current_time}.jpg')
+
+            # Save the image (assuming 'image' is your image data)
             cv2.imwrite(image_path, image)
             print("Saved high-resolution image:", image_path)
     except Exception as e:
@@ -120,30 +160,18 @@ def listen_for_connections(port, handler):
 @app.route('/')
 def index():
     # Cache-busting by appending a timestamp
-    stream_url = url_for('video_feed') + '?nocache=' + str(time.time())
+    stream_url = url_for('video_feed')
     return render_template('receiver_index.html', stream_url=stream_url)
 
 def generate_frames():
-    global frame, lock
-    frame_count = 0
-    start_time = time.time()
-
     while True:
-        with lock:
-            if frame is not None:
-                ret, buffer = cv2.imencode('.jpg', frame)
-                if ret:
-                    frame_encoded = buffer.tobytes()
-                    frame_count += 1
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_encoded + b'\r\n')
+        if not frame_queue.is_empty():
+            frame = frame_queue.get()
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if ret:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
-                    # Check time elapsed and calculate FPS
-                    if (time.time() - start_time) > 1:
-                        fps = frame_count / (time.time() - start_time)
-                        print(f"FPS: {fps:.2f}")
-                        frame_count = 0
-                        start_time = time.time()
 
 @app.route('/video_feed')
 def video_feed():
