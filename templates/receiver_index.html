@@ -1,11 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Video Streaming</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receiver Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 20px; }
+        #overlay { position: absolute; top: 60px; left: 10px; color: white; background: rgba(0, 0, 0, 0.5); padding: 10px; }
+        #stream { max-width: 100%; height: auto; }
+        #playButton { position: absolute; bottom: 10px; left: 10px; }
+    </style>
 </head>
-<body>
-    <h1>Video Stream</h1>
-    <!-- Assign an ID to the image for easy access in JavaScript -->
-    <img id="stream" src="{{ stream_url }}" alt="Video Stream">
+<body class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>Receiver Dashboard</h1>
+            <div id="overlay">
+                <p id="temperature">Temperature: </p>
+                <p id="humidity">Humidity: </p>
+                <p id="currentTime">Time: </p>
+            </div>
+            <button id="playButton" class="btn btn-primary">Play/Pause</button>
+            <img id="stream" src="{{ url_for('static', filename=latest_image) }}" alt="Latest High-Quality Image">
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script>
+        function updateTime() {
+            var now = new Date();
+            var timeString = now.getHours().toString().padStart(2, '0') + ':' +
+                             now.getMinutes().toString().padStart(2, '0') + ':' +
+                             now.getSeconds().toString().padStart(2, '0');
+            $('#currentTime').text('Time: ' + timeString);
+        }
+
+        function updateSensorData() {
+            $.getJSON('/sensor_data', function(data) {
+                // Assuming data.temperature and data.humidity are numbers
+                var formattedTemperature = parseFloat(data.temperature).toFixed(2);
+                var formattedHumidity = parseFloat(data.humidity).toFixed(2);
+
+                $('#temperature').text('Temperature: ' + formattedTemperature + '°C');
+                $('#humidity').text('Humidity: ' + formattedHumidity + '%');
+            });
+        }
+
+        $(document).ready(function() {
+            setInterval(updateTime, 1000); // Update time every second
+            setInterval(updateSensorData, 5000); // Update sensor data every 5 seconds
+
+            var playing = false;
+            $('#playButton').click(function() {
+                if (playing) {
+                    $('#stream').attr('src', '{{ url_for('static', filename=latest_image) }}');
+                    $(this).text('Play');
+                } else {
+                    $('#stream').attr('src', '{{ stream_url }}');
+                    $(this).text('Pause');
+                }
+                playing = !playing;
+            });
+        });
+    </script>
 </body>
 </html>
