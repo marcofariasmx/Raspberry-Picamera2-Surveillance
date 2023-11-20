@@ -20,7 +20,7 @@ mkdir -p $SCRIPT_DIR/Raspberry-Picamera2-Surveillance
 # Create the tmux starter script
 cat <<EOL > $SCRIPT_DIR/Raspberry-Picamera2-Surveillance/start_in_tmux.sh
 #!/bin/bash
-tmux new-session -d -s Raspberry-Picamera2-Surveillance "python3 $SCRIPT_DIR/Raspberry-Picamera2-Surveillance/flask_picam2_stream_and_pic.py"
+tmux new-session -d -s Raspberry-Picamera2-Surveillance "sudo python3 $SCRIPT_DIR/Raspberry-Picamera2-Surveillance/flask_picam2_stream_and_pic.py"
 EOL
 
 # Make the script executable
