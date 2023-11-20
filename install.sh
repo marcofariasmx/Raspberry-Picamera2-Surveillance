@@ -34,6 +34,6 @@ sudo cp /etc/rc.local /etc/rc.local.backup
 awk -v user="$CURRENT_USER" -v dir="$SCRIPT_DIR" '/^exit 0/ { print "/sbin/iwconfig wlan0 power off"; print "sudo -u " user " bash " dir "/Raspberry-Picamera2-Surveillance/start_in_tmux.sh &"; } { print; }' /etc/rc.local.backup | sudo tee /etc/rc.local
 
 # Change swappiness permanently
-echo "vm.swappiness=0" | sudo tee -a /etc/sysctl.conf
+echo "vm.swappiness=5" | sudo tee -a /etc/sysctl.conf
 
 echo "Script execution completed!"
