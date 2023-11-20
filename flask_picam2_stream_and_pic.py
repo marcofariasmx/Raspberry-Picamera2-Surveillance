@@ -62,7 +62,7 @@ class WatchdogTimer(Thread):
         with self.lock:
             self.last_heartbeat = time.time()
         self.heartbeat_count += 1
-        print("heartbeat updated..., count: ", str(self.heartbeat_count))
+        print("heartbeat updated... count: ", str(self.heartbeat_count))
 
     def stop(self):
         self.running = False
@@ -74,6 +74,7 @@ def reset_system():
     except Exception as e:
         print(f"Error during shutdown: {e}")
     os.execv(sys.executable, ['python'] + sys.argv)
+
 
 watchdog_timeout = 60 * 3  # in seconds, adjust as needed
 watchdog = WatchdogTimer(watchdog_timeout, reset_system)
@@ -348,6 +349,7 @@ def measure_brightness(image_path):
     _, _, v = cv2.split(hsv)
     return v.mean()  # Return the average brightness
 
+
 # Constants (in microseconds)
 MAX_EXPOSURE_TIME = 10000000
 MIN_EXPOSURE_TIME = 100000
@@ -361,6 +363,7 @@ HIGH_BRIGHTNESS_THRESHOLD = 60
 BUFFER_HIGH = 55
 DAY_BRIGHTNESS_THRESHOLD = 75
 
+
 def save_pic_every_minute():
     exposure_time = DEFAULT_EXPOSURE_TIME
 
@@ -368,6 +371,8 @@ def save_pic_every_minute():
     decreasing_exposure = False
 
     while True:
+        any_other_failure_condition = True
+
         path = create_directory()
         img_name = datetime.now().strftime("%H-%M-%S.jpg")
         full_path = os.path.join(path, img_name)
@@ -435,10 +440,15 @@ def save_pic_every_minute():
             picam2.set_controls(controls)
 
         print(full_path + " SAVED!")
+        any_other_failure_condition = False
 
         # Send the high resolution picture
+        # Initialize a flag to check if the high-res picture was sent
+        high_res_pic_sent = False
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
+                pic_socket.settimeout(10)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
                 # Capture and send the picture
                 img_buffer = io.BytesIO()
@@ -450,12 +460,22 @@ def save_pic_every_minute():
 
                 pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
                 print("High-resolution picture sent.")
+                high_res_pic_sent = True
+
+        except TimeoutError as e:
+            print(f"High-res picture connection timed out: {e}. Retrying...")
         except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
             print(f"High-res picture connection lost: {e}. Retrying...")
+        except Exception as e:
+            print(f"Unexpected error in High-res picture connection: {e}")
 
-        watchdog.update_heartbeat()
+        # Update the heartbeat
+        if high_res_pic_sent or not any_other_failure_condition:
+            watchdog.update_heartbeat()
 
-        time.sleep(60)  # Sleep for 60 seconds
+        sleep_time = 60
+        print("Sleeping for the next ", str(sleep_time), " seconds... \n")
+        time.sleep(sleep_time)  # Sleep for 60 seconds before retaking next picture
 
 
 def read_sensor():
@@ -469,14 +489,27 @@ def send_sensor_data():
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
+                sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
+
                 while True:
                     sensor_data = read_sensor()
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     time.sleep(10)  # Adjust as needed for sensor data frequency
+
+        except TimeoutError as e:
+            print(f"Sensor data connection timed out: {e}. Retrying...")
+            time.sleep(5)  # Wait before retrying
+
         except (ConnectionRefusedError, ConnectionResetError, BrokenPipeError) as e:
             print(f"Sensor data connection lost: {e}. Retrying...")
             time.sleep(5)  # Wait before retrying
+
+        except Exception as e:
+            print(f"Unexpected error in sending sensor data: {e}")
+            time.sleep(5)  # Wait before retrying
+
+
 def send_high_res_picture():
     while True:
         pic_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
