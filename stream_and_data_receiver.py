@@ -1,13 +1,12 @@
-import datetime
-import json
-import time
 from flask import Flask, Response, url_for, render_template
-import socket
+import os
+import datetime
 import threading
+import socket
 import cv2
 import numpy as np
 import struct
-import os
+import json
 
 
 class SingleItemQueue:
@@ -39,7 +38,7 @@ sensor_data = {}
 lock = threading.Lock()
 
 # Directory to save high-resolution images
-HIGH_RES_IMAGES_DIR = "high_res_images"
+HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
 if not os.path.exists(HIGH_RES_IMAGES_DIR):
     os.makedirs(HIGH_RES_IMAGES_DIR)
 
@@ -157,11 +156,36 @@ def listen_for_connections(port, handler):
             print(f"Retrying to listen on port {port}...")
             continue
 
+
+def get_latest_high_res_image():
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    date_directory = os.path.join('high_res_images', current_date)  # Relative path from the static directory
+    full_path = os.path.join(app.static_folder, date_directory)
+    if os.path.exists(full_path):
+        files = sorted([f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))], key=lambda x: os.path.getmtime(os.path.join(full_path, x)), reverse=True)
+        if files:
+            # Replace backslashes with forward slashes for web compatibility
+            return os.path.join(date_directory, files[0]).replace('\\', '/')  # Return the relative path
+    return None
+
+
+@app.route('/latest_image_url')
+def latest_image_url():
+    latest_image = get_latest_high_res_image()  # This function returns the latest image's relative path
+    if latest_image:
+        return url_for('static', filename=latest_image)
+    else:
+        return ''  # Return an empty string or a default image path if no image is found
+
+
+
 @app.route('/')
 def index():
-    # Cache-busting by appending a timestamp
+    latest_image = get_latest_high_res_image()
     stream_url = url_for('video_feed')
-    return render_template('receiver_index.html', stream_url=stream_url)
+    # Use global sensor data
+    global sensor_data
+    return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=sensor_data)
 
 def generate_frames():
     while True:
@@ -178,10 +202,17 @@ def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
+@app.route('/sensor_data')
+def get_sensor_data():
+    global sensor_data
+    return json.dumps(sensor_data)
+
+
 if __name__ == '__main__':
     # Start threads for handling connections
     threading.Thread(target=listen_for_connections, args=(VIDEO_STREAM_PORT, handle_video_stream)).start()
     threading.Thread(target=listen_for_connections, args=(SENSOR_DATA_PORT, handle_sensor_data)).start()
     threading.Thread(target=listen_for_connections, args=(HIGH_RES_PIC_PORT, handle_high_res_picture)).start()
 
+    # IF on debug mode, things get messy with threads and they stop working properly.
     app.run(host='0.0.0.0', port=5000, threaded=True)

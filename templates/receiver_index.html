@@ -1,11 +1,95 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Video Streaming</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receiver Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #overlay {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+        #streamContainer {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            margin-top: 40px; /* Space for the overlay */
+        }
+        #stream {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #playButton {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 3;
+        }
+    </style>
 </head>
 <body>
-    <h1>Video Stream</h1>
-    <!-- Assign an ID to the image for easy access in JavaScript -->
-    <img id="stream" src="{{ stream_url }}" alt="Video Stream">
+    <div id="overlay">
+        <div id="temperature">Temperature: </div>
+        <div id="humidity">Humidity: </div>
+        <div id="currentTime">Time: </div>
+    </div>
+    <div id="streamContainer">
+        <button id="playButton" class="btn btn-primary">Play/Pause</button>
+        <img id="stream" src="{{ url_for('static', filename=latest_image) }}" alt="Latest High-Quality Image">
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        function updateTime() {
+            var now = new Date();
+            var timeString = now.getHours().toString().padStart(2, '0') + ':' +
+                             now.getMinutes().toString().padStart(2, '0') + ':' +
+                             now.getSeconds().toString().padStart(2, '0');
+            $('#currentTime').text('Time: ' + timeString);
+        }
+
+        function updateSensorData() {
+            $.getJSON('/sensor_data', function(data) {
+                var formattedTemperature = parseFloat(data.temperature).toFixed(2);
+                var formattedHumidity = parseFloat(data.humidity).toFixed(2);
+                $('#temperature').text('Temperature: ' + formattedTemperature + '°C');
+                $('#humidity').text('Humidity: ' + formattedHumidity + '%');
+            });
+        }
+
+        $(document).ready(function() {
+            setInterval(updateTime, 1000); // Update time every second
+            setInterval(updateSensorData, 5000); // Update sensor data every 5 seconds
+
+            var playing = false;
+            $('#playButton').click(function() {
+                if (playing) {
+                    // Fetch the latest image URL and update the src attribute
+                    $.get('/latest_image_url', function(latestImageUrl) {
+                        if(latestImageUrl) {
+                            $('#stream').attr('src', latestImageUrl);
+                        }
+                    });
+                    $(this).text('Play');
+                } else {
+                    $('#stream').attr('src', '{{ stream_url }}');
+                    $(this).text('Pause');
+                }
+                playing = !playing;
+            });
+        });
+    </script>
 </body>
 </html>
