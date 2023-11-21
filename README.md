@@ -18,6 +18,10 @@ Environment conditions:
 -------------------------
 Install with:
 
+git clone https://github.com/marcofariasmx/Raspberry-Picamera2-Surveillance.git
+
+cd Raspberry-Picamera2-Surveillance
+
 chmod +x install.sh
 
 bash install.sh

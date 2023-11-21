@@ -6,9 +6,11 @@ sudo apt-get upgrade -y
 
 # Install necessary packages
 sudo apt-get install -y tmux
+sudo apt-get install -y pip
 sudo apt install -y python3-flask
 sudo apt install -y python3-picamera2
 sudo apt install -y python3-opencv
+sudo pip install Adafruit_DHT --break-system-packages
 
 # Get the current username and directory of the script
 CURRENT_USER="$USER"

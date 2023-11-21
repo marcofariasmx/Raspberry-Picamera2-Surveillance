@@ -33,7 +33,7 @@ app = Flask(__name__)
 # Connection parameters
 use_domain_name = False
 domain_name = 'marcofarias.com'
-ip_address = '192.168.100.40'
+ip_address = '192.168.100.10'
 receiver_ip = ''
 port = 5555
 SENSOR_DATA_PORT = 5556
