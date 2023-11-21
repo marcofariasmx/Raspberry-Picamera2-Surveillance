@@ -19,7 +19,7 @@ import struct
 import requests
 from werkzeug.serving import ThreadedWSGIServer
 from socket import SOL_SOCKET, SO_REUSEADDR
-
+import libcamera
 import Adafruit_DHT
 
 # Sensor setup
@@ -33,7 +33,7 @@ app = Flask(__name__)
 # Connection parameters
 use_domain_name = False
 domain_name = 'marcofarias.com'
-ip_address = '192.168.100.40'
+ip_address = '192.168.100.10'
 receiver_ip = ''
 port = 5555
 SENSOR_DATA_PORT = 5556
@@ -132,6 +132,10 @@ picam2.set_controls(initial_controls)
 
 print("initial controls config: \n")
 print(picam2.camera_controls)
+
+ROTATE_180 = True
+if ROTATE_180:
+    video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
 
 picam2.configure(video_config)
 encoder = H264Encoder()
