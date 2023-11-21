@@ -26,7 +26,6 @@ import Adafruit_DHT
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4  # GPIO pin number
 
-# Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
 
@@ -354,8 +353,15 @@ def measure_brightness(image_path):
     return v.mean()  # Return the average brightness
 
 
+CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
+
 # Constants (in microseconds)
-MAX_EXPOSURE_TIME = 10000000
+if CAM_MODULE_V == 3:
+    MAX_EXPOSURE_TIME = int(1000000 * 112) #112 seconds in total of max exposure
+elif CAM_MODULE_V == 2:
+    MAX_EXPOSURE_TIME = int(1000000 * 10)
+elif CAM_MODULE_V == 1:
+    MAX_EXPOSURE_TIME = int(1000000 * .9)
 MIN_EXPOSURE_TIME = 100000
 EXPOSURE_INCREMENT = 50000
 DEFAULT_EXPOSURE_TIME = 100000
