@@ -455,7 +455,7 @@ def save_pic_every_minute():
             adjusted = False
 
         # If really low exposure values, then increment exposure time twice as fast
-        elif brightness < 5:
+        elif brightness < 15:
             exposure_time *= 2
 
         # If really high exposure, decrement exposure time twice as fast
