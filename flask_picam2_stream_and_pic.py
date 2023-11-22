@@ -456,11 +456,11 @@ def save_pic_every_minute():
 
         # If really low exposure values, then increment exposure time twice as fast
         elif brightness < 15:
-            exposure_time *= 2
+            exposure_time = min(exposure_time * 2, MAX_EXPOSURE_TIME)
 
         # If really high exposure, decrement exposure time twice as fast
         elif brightness > 100:
-            exposure_time /= 2
+            exposure_time = max(exposure_time / 2, MIN_EXPOSURE_TIME)
 
         if adjusted:
             # Adjust the camera controls
