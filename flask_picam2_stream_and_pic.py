@@ -373,12 +373,16 @@ HIGH_BRIGHTNESS_THRESHOLD = 60
 BUFFER_HIGH = 55
 DAY_BRIGHTNESS_THRESHOLD = 75
 
+BRIGHTNESS_CHANGE_THRESHOLD = 100
+
 
 def save_pic_every_minute():
     exposure_time = DEFAULT_EXPOSURE_TIME
 
     increasing_exposure = False
     decreasing_exposure = False
+
+    last_brightness = None
 
     while True:
         any_other_failure_condition = True
@@ -437,6 +441,27 @@ def save_pic_every_minute():
                 #Todo: FIX this so that it only gets reset once
                 reset()
 
+        # Check for sudden brightness changes
+        if last_brightness is not None:
+            brightness_change = abs(brightness - last_brightness)
+            if brightness_change > BRIGHTNESS_CHANGE_THRESHOLD:
+                # Reset to auto
+                reset()
+                adjusted = False
+
+        # Check for really high brightness values
+        if brightness > 200:
+            reset()
+            adjusted = False
+
+        # If really low exposure values, then increment exposure time twice as fast
+        elif brightness < 5:
+            exposure_time *= 2
+
+        # If really high exposure, decrement exposure time twice as fast
+        elif brightness > 100:
+            exposure_time /= 2
+
         if adjusted:
             # Adjust the camera controls
             controls = {
@@ -448,6 +473,8 @@ def save_pic_every_minute():
                 "ColourGains": (2, 1.81)
             }
             picam2.set_controls(controls)
+
+        last_brightness = brightness  # Update the last brightness value
 
         print(full_path + " SAVED!")
         any_other_failure_condition = False
