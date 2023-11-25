@@ -193,7 +193,7 @@ def send_video_frames():
     """
     global receiver_ip
     # Todo: try switching to UDP for faster data transfer and also send the pictures every 1 min alongside other data
-    while not shutdown_event.is_set(): #while true...
+    while not shutdown_event.is_set():  # while True...
         try:
             # Resolve domain name to IP address
             if use_domain_name:
@@ -216,6 +216,12 @@ def send_video_frames():
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
             print(f"Connection lost: {e}. Attempting to reconnect...")
             time.sleep(5)  # Wait before retrying
+
+        # Check for shutdown event at a suitable place in your loop
+        if shutdown_event.is_set():
+            break
+
+    print("send_video_frames thread is shutting down")
 
 
 thread = Thread(target=send_video_frames)
@@ -560,17 +566,21 @@ def read_sensor():
     else:
         return {"temperature": "N/A", "humidity": "N/A"}
 
+
 def send_sensor_data():
-    while True:
+    while not shutdown_event.is_set(): # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
-                while True:
+                while not shutdown_event.is_set(): # while True...
                     sensor_data = read_sensor()
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     time.sleep(10)  # Adjust as needed for sensor data frequency
+
+                    if shutdown_event.is_set():
+                        break
 
         except TimeoutError as e:
             print(f"Sensor data connection timed out: {e}. Retrying...")
@@ -584,6 +594,7 @@ def send_sensor_data():
             print(f"Unexpected error in sending sensor data: {e}")
             time.sleep(5)  # Wait before retrying
 
+    print("send_sensor_data thread is shutting down")
 
 def send_high_res_picture():
     while True:
