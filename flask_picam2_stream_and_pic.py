@@ -131,9 +131,6 @@ initial_controls = {
 
 picam2.set_controls(initial_controls)
 
-print("initial controls config: \n")
-print(picam2.camera_controls)
-
 ROTATE_180 = True
 if ROTATE_180:
     video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
@@ -597,6 +594,11 @@ if __name__ == '__main__':
 
     try:
         server.serve_forever()
+
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt received, shutting down the server")
+        shutdown_server()
+
     finally:
         picam2.stop_recording()
         watchdog.stop()
