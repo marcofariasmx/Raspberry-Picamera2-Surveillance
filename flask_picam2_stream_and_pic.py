@@ -99,25 +99,24 @@ def shutdown_server():
     current_thread = threading.current_thread()
     print("Current thread: ", current_thread.name)
 
-    # Wait for threads to finish, except for the current thread if it's the watchdog
-    if thread.is_alive():
-        print("Waiting for thread to finish...")
+    # Wait for threads to finish, skip if it's the current thread
+    if thread.is_alive() and thread != current_thread:
+        print("Waiting for save_pic_every_minute thread to finish...")
         thread.join()
     else:
-        print("thread is not alive")
+        print("save_pic_every_minute thread NOT ALIVE OR IS CURRENT THREAD...")
 
-    if sensor_thread.is_alive():
+    if sensor_thread.is_alive() and sensor_thread != current_thread:
         print("Waiting for sensor_thread to finish...")
         sensor_thread.join()
     else:
-        print("sensor_thread is not alive")
+        print("sensor_thread NOT ALIVE OR IS CURRENT THREAD...")
 
-    # Add similar checks and joins for other threads
-    if video_thread.is_alive():
+    if video_thread.is_alive() and video_thread != current_thread:
         print("Waiting for video_thread to finish...")
         video_thread.join()
     else:
-        print("video_thread is not alive")
+        print("video_thread NOT ALIVE OR IS CURRENT THREAD...")
 
     if watchdog.is_alive() and current_thread != watchdog:
         print("Stopping watchdog...")
