@@ -95,13 +95,21 @@ def shutdown_server():
     if thread.is_alive():
         print("Waiting for thread to finish...")
         thread.join()
+    else:
+        print("thread is not alive")
+
     if sensor_thread.is_alive():
         print("Waiting for sensor_thread to finish...")
         sensor_thread.join()
+    else:
+        print("sensor_thread is not alive")
+
     # Add similar checks and joins for other threads
     if video_thread.is_alive():
         print("Waiting for video_thread to finish...")
         video_thread.join()
+    else:
+        print("video_thread is not alive")
 
     if watchdog.is_alive() and current_thread != watchdog:
         print("Stopping watchdog...")
@@ -127,11 +135,6 @@ def shutdown():
 def perform_shutdown():
     print("Resetting the system...")
     shutdown_server()
-
-
-watchdog_timeout = 60 * 3  # in seconds, adjust as needed
-watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
-watchdog.start()
 
 
 class StreamingOutput(io.BufferedIOBase):
@@ -564,7 +567,7 @@ def save_pic_every_minute():
     print("save_pic_every_minute thread is shutting down")
 
 
-def read_sensor():
+def read_sensor() -> dict:
     humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
     if humidity is not None and temperature is not None:
         return {"temperature": temperature, "humidity": humidity}
@@ -582,6 +585,8 @@ def send_sensor_data():
                 while not shutdown_event.is_set():  # while True...
                     sensor_data = read_sensor()
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
+                    print("Sensor data sent...")
+                    print(sensor_data)
                     time.sleep(10)  # Adjust as needed for sensor data frequency
 
                     if shutdown_event.is_set():
@@ -604,18 +609,27 @@ def send_sensor_data():
 
 
 if __name__ == '__main__':
+    # Watchdog start
+    watchdog_timeout = 60 * 3  # in seconds, adjust as needed
+    watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
+    watchdog.start()
+    print(watchdog.name, " : watchdog thread started")
+
     # Start the thread to save pictures every minute
     thread = Thread(target=save_pic_every_minute)
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
+    print(thread.name, " : thread started")
 
     sensor_thread = Thread(target=send_sensor_data)
     sensor_thread.daemon = True
     sensor_thread.start()
+    print(sensor_thread.name, " : sensor_thread started")
 
     video_thread = Thread(target=send_video_frames)
     video_thread.daemon = True
     video_thread.start()
+    print(video_thread.name, " : video_thread started")
 
     # Create a server instance with threaded support
     server = ThreadedWSGIServer('0.0.0.0', 8000, app)
