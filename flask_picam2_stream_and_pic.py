@@ -140,6 +140,12 @@ def manual_shutdown():
     shutdown_server()
     return 'Server shutting down...'
 
+@app.route('/manual_reboot')
+def manual_shutdown():
+    shutdown_server()
+    os.execv(sys.executable, ['python'] + sys.argv)
+    return 'Server shutting down...'
+
 def perform_shutdown():
     print("Resetting the system...")
     shutdown_server()
@@ -623,17 +629,19 @@ if __name__ == '__main__':
     watchdog.start()
     print(watchdog.name, " : watchdog thread started")
 
+    # Start thread to send data
+    sensor_thread = Thread(target=send_sensor_data)
+    sensor_thread.daemon = True
+    sensor_thread.start()
+    print(sensor_thread.name, " : sensor_thread started")
+
     # Start the thread to save pictures every minute
     thread = Thread(target=save_pic_every_minute)
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
     print(thread.name, " : thread started")
 
-    sensor_thread = Thread(target=send_sensor_data)
-    sensor_thread.daemon = True
-    sensor_thread.start()
-    print(sensor_thread.name, " : sensor_thread started")
-
+    # Start thread to send video
     video_thread = Thread(target=send_video_frames)
     video_thread.daemon = True
     video_thread.start()
