@@ -67,6 +67,9 @@ class WatchdogTimer(Thread):
             self.last_heartbeat = time.time()
         self.heartbeat_count += 1
         print("heartbeat updated... count: ", str(self.heartbeat_count))
+        if self.heartbeat_count == 3:
+            print("fake watchdog stop activated")
+            self.stop()
 
     def stop(self):
         self.running = False
@@ -142,8 +145,18 @@ def manual_shutdown():
 
 @app.route('/manual_reboot')
 def manual_reboot():
+    print("Initiating manual reboot...")
+
+    # Gracefully shutdown the server and release resources
     shutdown_server()
+
+    # Allow some time for resources to be cleaned up
+    time.sleep(5)
+
+    # Restart the script
+    print("Restarting script...")
     os.execv(sys.executable, ['python'] + sys.argv)
+
     return 'Server shutting down...'
 
 def perform_shutdown():
