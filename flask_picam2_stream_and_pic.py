@@ -560,6 +560,7 @@ def save_pic_every_minute():
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
         time.sleep(sleep_time)  # Sleep for 60 seconds before retaking next picture
 
+    print("save_pic_every_minute thread is shutting down")
 
 def read_sensor():
     humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
