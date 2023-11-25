@@ -141,7 +141,7 @@ def manual_shutdown():
     return 'Server shutting down...'
 
 @app.route('/manual_reboot')
-def manual_shutdown():
+def manual_reboot():
     shutdown_server()
     os.execv(sys.executable, ['python'] + sys.argv)
     return 'Server shutting down...'
