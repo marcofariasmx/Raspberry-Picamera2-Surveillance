@@ -138,10 +138,19 @@ def shutdown():
     shutdown_server()
     return 'Server shutting down...'
 
+
 @app.route('/manual_shutdown')
 def manual_shutdown():
     shutdown_server()
     return 'Server shutting down...'
+
+
+@app.route('/complete_shutdown')
+def complete_shutdown():
+    shutdown_server()
+    sys.exit(100)
+    return 'Server shutting down...'
+
 
 @app.route('/manual_reboot')
 def manual_reboot():
