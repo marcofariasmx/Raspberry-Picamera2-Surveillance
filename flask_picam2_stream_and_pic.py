@@ -97,6 +97,9 @@ def shutdown_server():
         print("Waiting for sensor_thread to finish...")
         sensor_thread.join()
     # Add similar checks and joins for other threads
+    if video_thread.is_alive():
+        print("Waiting for video_thread to finish...")
+        video_thread.join()
 
     if watchdog.is_alive() and current_thread != watchdog:
         print("Stopping watchdog...")
@@ -528,6 +531,8 @@ def save_pic_every_minute():
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
+                if shutdown_event.is_set():
+                    break
                 pic_socket.settimeout(10)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
                 # Capture and send the picture
