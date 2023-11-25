@@ -58,8 +58,8 @@ class WatchdogTimer(Thread):
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout:
                     print("Watchdog triggered reset")
+                    # Execute method in charge of reset
                     self.reset_callback()
-                    self.last_heartbeat = time.time()
             time.sleep(1)
 
     def update_heartbeat(self):
@@ -69,7 +69,8 @@ class WatchdogTimer(Thread):
         print("heartbeat updated... count: ", str(self.heartbeat_count))
         if self.heartbeat_count == 3:
             print("fake watchdog stop activated")
-            self.stop()
+            print("Watchdog triggered reset")
+            self.reset_callback()
 
     def stop(self):
         self.running = False
