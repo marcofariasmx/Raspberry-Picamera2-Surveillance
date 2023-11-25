@@ -6,13 +6,12 @@ from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import FileOutput
 import io
-from threading import Condition
+from threading import Condition, Thread, Lock, Event
 from datetime import datetime
 import cv2
 import os
 from libcamera import controls as libcontrols
 import time
-from threading import Thread, Lock
 import sys
 import socket
 import struct
@@ -25,6 +24,9 @@ import Adafruit_DHT
 # Sensor setup
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4  # GPIO pin number
+
+# Global shutdown event
+shutdown_event = Event()
 
 
 app = Flask(__name__)
@@ -49,7 +51,7 @@ class WatchdogTimer(Thread):
         self.heartbeat_count = 0
 
     def run(self):
-        while self.running:
+        while self.running and not shutdown_event.is_set():
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout:
                     print("Watchdog triggered reset")
@@ -149,7 +151,7 @@ def send_video_frames():
     """
     global receiver_ip
     # Todo: try switching to UDP for faster data transfer and also send the pictures every 1 min alongside other data
-    while True:
+    while not shutdown_event.is_set(): #while true...
         try:
             # Resolve domain name to IP address
             if use_domain_name:
@@ -330,12 +332,28 @@ def browse(subpath=""):
                                next_image=os.path.join(dir_path, next_image) if next_image else None)
 
 
+def shutdown_server():
+    # Signal all threads to stop
+    shutdown_event.set()
+
+    # Wait for threads to finish
+    watchdog.stop()  # Make sure you have a method to stop the watchdog
+    watchdog.join()
+
+    thread.join()  # For your video frames sending thread
+    sensor_thread.join()  # For your sensor data thread
+    # Include joins for any other threads you have
+
+    # Shutdown the Flask server
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+
+
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
-    shutdown_function = request.environ.get('werkzeug.server.shutdown')
-    if shutdown_function is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    shutdown_function()
+    shutdown_server()
     return 'Server shutting down...'
 
 def create_directory():
