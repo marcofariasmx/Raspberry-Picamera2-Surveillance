@@ -227,10 +227,6 @@ def send_video_frames():
     print("send_video_frames thread is shutting down")
 
 
-thread = Thread(target=send_video_frames)
-thread.daemon = True
-thread.start()
-
 @app.route('/')
 def index():
     return render_template('index.html', stream_url=url_for('stream'))
@@ -622,6 +618,10 @@ if __name__ == '__main__':
     sensor_thread = Thread(target=send_sensor_data)
     sensor_thread.daemon = True
     sensor_thread.start()
+
+    video_thread = Thread(target=send_video_frames)
+    video_thread.daemon = True
+    video_thread.start()
 
     # Create a server instance with threaded support
     server = ThreadedWSGIServer('0.0.0.0', 8000, app)
