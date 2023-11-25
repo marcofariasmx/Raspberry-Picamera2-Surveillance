@@ -206,12 +206,15 @@ def send_video_frames():
                 print("")
                 print(f"Connected to receiver at {receiver_ip}:{port}")
 
-                while True:
+                while not shutdown_event.is_set():  # while True:
                     yuv420 = picam2.capture_array("lores")
                     rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
                     _, buffer = cv2.imencode('.jpg', rgb)
                     frame = buffer.tobytes()
                     client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+
+                    if shutdown_event.is_set():
+                        break
 
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
             print(f"Connection lost: {e}. Attempting to reconnect...")
