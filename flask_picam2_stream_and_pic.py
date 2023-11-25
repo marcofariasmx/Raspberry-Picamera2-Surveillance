@@ -1,4 +1,6 @@
 import json
+import threading
+
 from flask import Flask, Response, url_for, send_file, render_template, request, jsonify
 from picamera2 import Picamera2
 #from picamera2.encoders import JpegEncoder
@@ -81,8 +83,11 @@ def shutdown_server():
     # Signal all threads to stop
     shutdown_event.set()
 
-    # Wait for threads to finish
-    if watchdog.is_alive():
+    # Get the current thread
+    current_thread = threading.current_thread()
+
+    # Wait for threads to finish, except for the current thread if it's the watchdog
+    if watchdog.is_alive() and current_thread != watchdog:
         watchdog.stop()
         watchdog.join()
     if thread.is_alive():
@@ -92,7 +97,7 @@ def shutdown_server():
     # Add joins for other threads
 
     # Shutdown the Flask server
-    if server is not None:
+    if server is not None and current_thread != threading.main_thread():
         server.shutdown()
 
 @app.route('/shutdown', methods=['POST'])
