@@ -77,8 +77,36 @@ def reset_system():
     os.execv(sys.executable, ['python'] + sys.argv)
 
 
+def shutdown_server():
+    # Signal all threads to stop
+    shutdown_event.set()
+
+    # Wait for threads to finish
+    if watchdog.is_alive():
+        watchdog.stop()
+        watchdog.join()
+    if thread.is_alive():
+        thread.join()
+    if sensor_thread.is_alive():
+        sensor_thread.join()
+    # Add joins for other threads
+
+    # Shutdown the Flask server
+    if server is not None:
+        server.shutdown()
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    shutdown_server()
+    return 'Server shutting down...'
+
+def perform_shutdown():
+    print("Resetting the system...")
+    shutdown_server()
+
+
 watchdog_timeout = 60 * 3  # in seconds, adjust as needed
-watchdog = WatchdogTimer(watchdog_timeout, reset_system)
+watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
 watchdog.start()
 
 PAGE = """
@@ -158,6 +186,7 @@ def send_video_frames():
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                 client_socket.connect((receiver_ip, port))
+                print("")
                 print(f"Connected to receiver at {receiver_ip}:{port}")
 
                 while True:
@@ -329,29 +358,6 @@ def browse(subpath=""):
                                next_image=os.path.join(dir_path, next_image) if next_image else None)
 
 
-def shutdown_server():
-    # Signal all threads to stop
-    shutdown_event.set()
-
-    # Wait for threads to finish
-    watchdog.stop()  # Make sure you have a method to stop the watchdog
-    watchdog.join()
-
-    thread.join()  # For your video frames sending thread
-    sensor_thread.join()  # For your sensor data thread
-    # Include joins for any other threads you have
-
-    # Shutdown the Flask server
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-
-
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    shutdown_server()
-    return 'Server shutting down...'
 
 def create_directory():
     dir_name = datetime.now().strftime("%d-%m-%Y")
