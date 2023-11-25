@@ -26,7 +26,6 @@ import Adafruit_DHT
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4  # GPIO pin number
 
-# Todo: make the file be executed with high permissions at startup so that it can create necessary directories.
 
 app = Flask(__name__)
 
@@ -354,8 +353,15 @@ def measure_brightness(image_path):
     return v.mean()  # Return the average brightness
 
 
+CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
+
 # Constants (in microseconds)
-MAX_EXPOSURE_TIME = 10000000
+if CAM_MODULE_V == 3:
+    MAX_EXPOSURE_TIME = int(1000000 * 112) #112 seconds in total of max exposure
+elif CAM_MODULE_V == 2:
+    MAX_EXPOSURE_TIME = int(1000000 * 10)
+elif CAM_MODULE_V == 1:
+    MAX_EXPOSURE_TIME = int(1000000 * .9)
 MIN_EXPOSURE_TIME = 100000
 EXPOSURE_INCREMENT = 50000
 DEFAULT_EXPOSURE_TIME = 100000
@@ -367,12 +373,16 @@ HIGH_BRIGHTNESS_THRESHOLD = 60
 BUFFER_HIGH = 55
 DAY_BRIGHTNESS_THRESHOLD = 75
 
+BRIGHTNESS_CHANGE_THRESHOLD = 100
+
 
 def save_pic_every_minute():
     exposure_time = DEFAULT_EXPOSURE_TIME
 
     increasing_exposure = False
     decreasing_exposure = False
+
+    last_brightness = None
 
     while True:
         any_other_failure_condition = True
@@ -431,6 +441,27 @@ def save_pic_every_minute():
                 #Todo: FIX this so that it only gets reset once
                 reset()
 
+        # Check for sudden brightness changes
+        if last_brightness is not None:
+            brightness_change = abs(brightness - last_brightness)
+            if brightness_change > BRIGHTNESS_CHANGE_THRESHOLD:
+                # Reset to auto
+                reset()
+                adjusted = False
+
+        # Check for really high brightness values
+        if brightness > 200:
+            reset()
+            adjusted = False
+
+        # If really low exposure values, then increment exposure time twice as fast
+        elif brightness < 15:
+            exposure_time = min(exposure_time * 2, MAX_EXPOSURE_TIME)
+
+        # If really high exposure, decrement exposure time twice as fast
+        elif brightness > 100:
+            exposure_time = max(exposure_time / 2, MIN_EXPOSURE_TIME)
+
         if adjusted:
             # Adjust the camera controls
             controls = {
@@ -442,6 +473,8 @@ def save_pic_every_minute():
                 "ColourGains": (2, 1.81)
             }
             picam2.set_controls(controls)
+
+        last_brightness = brightness  # Update the last brightness value
 
         print(full_path + " SAVED!")
         any_other_failure_condition = False
