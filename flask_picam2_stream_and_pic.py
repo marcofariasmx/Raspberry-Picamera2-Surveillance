@@ -42,6 +42,7 @@ port = 5555
 SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
+
 class WatchdogTimer(Thread):
     def __init__(self, timeout, reset_callback):
         Thread.__init__(self)
@@ -70,6 +71,7 @@ class WatchdogTimer(Thread):
     def stop(self):
         self.running = False
 
+
 def reset_system():
     print("Resetting the system...")
     try:
@@ -77,7 +79,6 @@ def reset_system():
     except Exception as e:
         print(f"Error during shutdown: {e}")
     os.execv(sys.executable, ['python'] + sys.argv)
-
 
 
 def shutdown_server():
@@ -115,10 +116,12 @@ def shutdown_server():
 
     print("Shutdown complete.")
 
+
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
     shutdown_server()
     return 'Server shutting down...'
+
 
 def perform_shutdown():
     print("Resetting the system...")
@@ -128,20 +131,6 @@ def perform_shutdown():
 watchdog_timeout = 60 * 3  # in seconds, adjust as needed
 watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
 watchdog.start()
-
-PAGE = """
-<html>
-<head>
-<title>picamera2 MJPEG streaming demo</title>
-</head>
-<body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
-<img src="{}" width="1536" height="864">
-<p>Temperature: {}°C</p>
-<p>Humidity: {}%</p>
-</body>
-</html>
-"""
 
 
 class StreamingOutput(io.BufferedIOBase):
@@ -344,6 +333,7 @@ def reset():
 
     return str(initial_controls)
 
+
 @app.route('/activate_long_exposure_mode')
 def activate_long_exposure_mode():
     # Create a dictionary with the desired controls
@@ -383,13 +373,13 @@ def browse(subpath=""):
                                next_image=os.path.join(dir_path, next_image) if next_image else None)
 
 
-
 def create_directory():
     dir_name = datetime.now().strftime("%d-%m-%Y")
     path = os.path.join('static', dir_name)
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
 
 # Add this function to estimate the brightness of an image
 def measure_brightness(image_path):
@@ -403,7 +393,7 @@ CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
 
 # Constants (in microseconds)
 if CAM_MODULE_V == 3:
-    MAX_EXPOSURE_TIME = int(1000000 * 112) #112 seconds in total of max exposure
+    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
 elif CAM_MODULE_V == 2:
     MAX_EXPOSURE_TIME = int(1000000 * 10)
 elif CAM_MODULE_V == 1:
@@ -568,6 +558,7 @@ def save_pic_every_minute():
 
     print("save_pic_every_minute thread is shutting down")
 
+
 def read_sensor():
     humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
     if humidity is not None and temperature is not None:
@@ -577,13 +568,13 @@ def read_sensor():
 
 
 def send_sensor_data():
-    while not shutdown_event.is_set(): # while True...
+    while not shutdown_event.is_set():  # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
-                while not shutdown_event.is_set(): # while True...
+                while not shutdown_event.is_set():  # while True...
                     sensor_data = read_sensor()
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     time.sleep(10)  # Adjust as needed for sensor data frequency
@@ -604,19 +595,6 @@ def send_sensor_data():
             time.sleep(5)  # Wait before retrying
 
     print("send_sensor_data thread is shutting down")
-
-def send_high_res_picture():
-    while True:
-        pic_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
-        try:
-            pic_path = ''#save_high_res_picture()
-            with open(pic_path, 'rb') as pic_file:
-                pic_data = pic_file.read()
-                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
-        finally:
-            pic_socket.close()
-        time.sleep(60)  # Adjust for picture frequency
 
 
 if __name__ == '__main__':
