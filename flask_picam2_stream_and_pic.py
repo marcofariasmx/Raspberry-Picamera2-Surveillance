@@ -427,7 +427,7 @@ def save_pic_every_minute():
 
     last_brightness = None
 
-    while True:
+    while not shutdown_event.is_set():  # while True:
         any_other_failure_condition = True
 
         path = create_directory()
@@ -552,6 +552,9 @@ def save_pic_every_minute():
         # Update the heartbeat
         if high_res_pic_sent or not any_other_failure_condition:
             watchdog.update_heartbeat()
+
+        if shutdown_event.is_set():
+            break
 
         sleep_time = 60
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
