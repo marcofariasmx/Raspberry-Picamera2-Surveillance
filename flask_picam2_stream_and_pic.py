@@ -89,6 +89,7 @@ def shutdown_server():
 
     # Get the current thread
     current_thread = threading.current_thread()
+    print("Current thread: ", current_thread.name)
 
     # Wait for threads to finish, except for the current thread if it's the watchdog
     if thread.is_alive():
@@ -206,6 +207,7 @@ def send_video_frames():
                     client_socket.sendall(struct.pack("Q", len(frame)) + frame)
 
                     if shutdown_event.is_set():
+                        print("shutdown_event triggered in send_video_frames() (1)")
                         break
 
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
@@ -214,6 +216,7 @@ def send_video_frames():
 
         # Check for shutdown event at a suitable place in your loop
         if shutdown_event.is_set():
+            print("shutdown_event triggered in send_video_frames() (2)")
             break
 
     print("send_video_frames thread is shutting down")
@@ -522,6 +525,7 @@ def save_pic_every_minute():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
                 if shutdown_event.is_set():
+                    print("shutdown_event triggered in save_pic_every_minute() (1)")
                     break
                 pic_socket.settimeout(10)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
@@ -554,6 +558,7 @@ def save_pic_every_minute():
         for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
             time.sleep(1)
             if shutdown_event.is_set():
+                print("shutdown_event triggered in save_pic_every_minute() (2)")
                 break
 
     print("save_pic_every_minute thread is shutting down")
@@ -580,6 +585,7 @@ def send_sensor_data():
                     time.sleep(10)  # Adjust as needed for sensor data frequency
 
                     if shutdown_event.is_set():
+                        print("shutdown_event triggered in send_sensor_data() (1)")
                         break
 
         except TimeoutError as e:
