@@ -87,6 +87,10 @@ def shutdown_server():
     # Signal all threads to stop
     shutdown_event.set()
 
+    # Stopping camera
+    picam2.stop_recording()
+    print("picamera stopped")
+
     # Get the current thread
     current_thread = threading.current_thread()
     print("Current thread: ", current_thread.name)
@@ -131,6 +135,10 @@ def shutdown():
     shutdown_server()
     return 'Server shutting down...'
 
+@app.route('/manual_shutdown')
+def manual_shutdown():
+    shutdown_server()
+    return 'Server shutting down...'
 
 def perform_shutdown():
     print("Resetting the system...")
