@@ -595,7 +595,7 @@ def send_sensor_data():
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     print("Sensor data sent...")
                     print(sensor_data)
-                    time.sleep(10)  # Adjust as needed for sensor data frequency
+                    time.sleep(60)  # Adjust as needed for sensor data frequency
 
                     if shutdown_event.is_set():
                         print("shutdown_event triggered in send_sensor_data() (1)")
