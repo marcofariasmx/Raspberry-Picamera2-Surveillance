@@ -79,7 +79,10 @@ def reset_system():
     os.execv(sys.executable, ['python'] + sys.argv)
 
 
+
 def shutdown_server():
+    print("Initiating shutdown...")
+
     # Signal all threads to stop
     shutdown_event.set()
 
@@ -87,18 +90,27 @@ def shutdown_server():
     current_thread = threading.current_thread()
 
     # Wait for threads to finish, except for the current thread if it's the watchdog
-    if watchdog.is_alive() and current_thread != watchdog:
-        watchdog.stop()
-        watchdog.join()
     if thread.is_alive():
+        print("Waiting for thread to finish...")
         thread.join()
     if sensor_thread.is_alive():
+        print("Waiting for sensor_thread to finish...")
         sensor_thread.join()
-    # Add joins for other threads
+    # Add similar checks and joins for other threads
+
+    if watchdog.is_alive() and current_thread != watchdog:
+        print("Stopping watchdog...")
+        watchdog.stop()
+        watchdog.join()
+
+    print("Threads stopped. Checking server shutdown...")
 
     # Shutdown the Flask server
     if server is not None and current_thread != threading.main_thread():
+        print("Shutting down server...")
         server.shutdown()
+
+    print("Shutdown complete.")
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
