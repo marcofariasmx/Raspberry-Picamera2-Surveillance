@@ -553,12 +553,13 @@ def save_pic_every_minute():
         if high_res_pic_sent or not any_other_failure_condition:
             watchdog.update_heartbeat()
 
-        if shutdown_event.is_set():
-            break
-
+        # Sleep in smaller increments to allow for shutdown check
         sleep_time = 60
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
-        time.sleep(sleep_time)  # Sleep for 60 seconds before retaking next picture
+        for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
+            time.sleep(1)
+            if shutdown_event.is_set():
+                break
 
     print("save_pic_every_minute thread is shutting down")
 
