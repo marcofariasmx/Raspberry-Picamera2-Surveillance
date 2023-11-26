@@ -1,4 +1,6 @@
 import json
+import threading
+
 from flask import Flask, Response, url_for, send_file, render_template, request, jsonify
 from picamera2 import Picamera2
 #from picamera2.encoders import JpegEncoder
@@ -6,13 +8,12 @@ from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import FileOutput
 import io
-from threading import Condition
+from threading import Condition, Thread, Lock, Event
 from datetime import datetime
 import cv2
 import os
 from libcamera import controls as libcontrols
 import time
-from threading import Thread, Lock
 import sys
 import socket
 import struct
@@ -26,6 +27,9 @@ import Adafruit_DHT
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4  # GPIO pin number
 
+# Global shutdown event
+shutdown_event = Event()
+
 
 app = Flask(__name__)
 
@@ -38,6 +42,7 @@ port = 5555
 SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
+
 class WatchdogTimer(Thread):
     def __init__(self, timeout, reset_callback):
         Thread.__init__(self)
@@ -49,12 +54,12 @@ class WatchdogTimer(Thread):
         self.heartbeat_count = 0
 
     def run(self):
-        while self.running:
+        while self.running and not shutdown_event.is_set():
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout:
                     print("Watchdog triggered reset")
+                    # Execute method in charge of reset
                     self.reset_callback()
-                    self.last_heartbeat = time.time()
             time.sleep(1)
 
     def update_heartbeat(self):
@@ -62,9 +67,15 @@ class WatchdogTimer(Thread):
             self.last_heartbeat = time.time()
         self.heartbeat_count += 1
         print("heartbeat updated... count: ", str(self.heartbeat_count))
+        # # Only execute this for testing purposes
+        # if self.heartbeat_count == 3:
+        #     print("fake watchdog stop activated")
+        #     print("Watchdog triggered reset")
+        #     self.reset_callback()
 
     def stop(self):
         self.running = False
+
 
 def reset_system():
     print("Resetting the system...")
@@ -75,23 +86,100 @@ def reset_system():
     os.execv(sys.executable, ['python'] + sys.argv)
 
 
-watchdog_timeout = 60 * 3  # in seconds, adjust as needed
-watchdog = WatchdogTimer(watchdog_timeout, reset_system)
-watchdog.start()
+def shutdown_server():
+    print("Initiating shutdown...")
 
-PAGE = """
-<html>
-<head>
-<title>picamera2 MJPEG streaming demo</title>
-</head>
-<body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
-<img src="{}" width="1536" height="864">
-<p>Temperature: {}°C</p>
-<p>Humidity: {}%</p>
-</body>
-</html>
-"""
+    # Signal all threads to stop
+    shutdown_event.set()
+
+    # Safely stop camera recording
+    try:
+        picam2.stop_recording()
+        print("picamera stopped")
+    except Exception as e:
+        print(f"Error stopping camera recording: {e}")
+
+    # Get the current thread
+    current_thread = threading.current_thread()
+    print("Current thread: ", current_thread.name)
+
+    # Define a timeout for thread joins
+    join_timeout = 10
+
+    # Wait for threads to finish, skip if it's the current thread
+    if thread.is_alive() and thread != current_thread:
+        print("Waiting for save_pic_every_minute thread to finish...")
+        thread.join(timeout=join_timeout)
+    else:
+        print("save_pic_every_minute thread NOT ALIVE OR IS CURRENT THREAD...")
+
+    if sensor_thread.is_alive() and sensor_thread != current_thread:
+        print("Waiting for sensor_thread to finish...")
+        sensor_thread.join(timeout=join_timeout)
+    else:
+        print("sensor_thread NOT ALIVE OR IS CURRENT THREAD...")
+
+    if video_thread.is_alive() and video_thread != current_thread:
+        print("Waiting for video_thread to finish...")
+        video_thread.join(timeout=join_timeout)
+    else:
+        print("video_thread NOT ALIVE OR IS CURRENT THREAD...")
+
+    if watchdog.is_alive() and current_thread != watchdog:
+        print("Stopping watchdog...")
+        watchdog.stop()
+        watchdog.join(timeout=join_timeout)
+        if watchdog.is_alive():
+            print("Warning: watchdog did not shut down cleanly.")
+
+    print("Threads stopped. Checking server shutdown...")
+
+    # Shutdown the Flask server
+    if server is not None and current_thread != threading.main_thread():
+        print("Shutting down server...")
+        server.shutdown()
+
+    print("Shutdown complete.")
+
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    shutdown_server()
+    return 'Server shutting down...'
+
+
+@app.route('/manual_shutdown')
+def manual_shutdown():
+    shutdown_server()
+    return 'Server shutting down...'
+
+
+@app.route('/complete_shutdown')
+def complete_shutdown():
+    shutdown_server()
+    sys.exit(100)
+    return 'Server shutting down...'
+
+
+@app.route('/manual_reboot')
+def manual_reboot():
+    print("Initiating manual reboot...")
+
+    # Gracefully shutdown the server and release resources
+    shutdown_server()
+
+    # Allow some time for resources to be cleaned up
+    time.sleep(5)
+
+    # Restart the script
+    print("Restarting script...")
+    os.execv(sys.executable, ['python'] + sys.argv)
+
+    return 'Server shutting down...'
+
+def perform_shutdown():
+    print("Resetting the system...")
+    shutdown_server()
 
 
 class StreamingOutput(io.BufferedIOBase):
@@ -129,9 +217,6 @@ initial_controls = {
 
 picam2.set_controls(initial_controls)
 
-print("initial controls config: \n")
-print(picam2.camera_controls)
-
 ROTATE_180 = True
 if ROTATE_180:
     video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
@@ -149,7 +234,7 @@ def send_video_frames():
     """
     global receiver_ip
     # Todo: try switching to UDP for faster data transfer and also send the pictures every 1 min alongside other data
-    while True:
+    while not shutdown_event.is_set():  # while True...
         try:
             # Resolve domain name to IP address
             if use_domain_name:
@@ -159,23 +244,31 @@ def send_video_frames():
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                 client_socket.connect((receiver_ip, port))
+                print("")
                 print(f"Connected to receiver at {receiver_ip}:{port}")
 
-                while True:
+                while not shutdown_event.is_set():  # while True:
                     yuv420 = picam2.capture_array("lores")
                     rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
                     _, buffer = cv2.imencode('.jpg', rgb)
                     frame = buffer.tobytes()
                     client_socket.sendall(struct.pack("Q", len(frame)) + frame)
 
+                    if shutdown_event.is_set():
+                        print("shutdown_event triggered in send_video_frames() (1)")
+                        break
+
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
             print(f"Connection lost: {e}. Attempting to reconnect...")
             time.sleep(5)  # Wait before retrying
 
+        # Check for shutdown event at a suitable place in your loop
+        if shutdown_event.is_set():
+            print("shutdown_event triggered in send_video_frames() (2)")
+            break
 
-thread = Thread(target=send_video_frames)
-thread.daemon = True
-thread.start()
+    print("send_video_frames thread is shutting down")
+
 
 @app.route('/')
 def index():
@@ -291,6 +384,7 @@ def reset():
 
     return str(initial_controls)
 
+
 @app.route('/activate_long_exposure_mode')
 def activate_long_exposure_mode():
     # Create a dictionary with the desired controls
@@ -330,20 +424,13 @@ def browse(subpath=""):
                                next_image=os.path.join(dir_path, next_image) if next_image else None)
 
 
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    shutdown_function = request.environ.get('werkzeug.server.shutdown')
-    if shutdown_function is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    shutdown_function()
-    return 'Server shutting down...'
-
 def create_directory():
     dir_name = datetime.now().strftime("%d-%m-%Y")
     path = os.path.join('static', dir_name)
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
 
 # Add this function to estimate the brightness of an image
 def measure_brightness(image_path):
@@ -357,7 +444,7 @@ CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
 
 # Constants (in microseconds)
 if CAM_MODULE_V == 3:
-    MAX_EXPOSURE_TIME = int(1000000 * 112) #112 seconds in total of max exposure
+    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
 elif CAM_MODULE_V == 2:
     MAX_EXPOSURE_TIME = int(1000000 * 10)
 elif CAM_MODULE_V == 1:
@@ -384,16 +471,22 @@ def save_pic_every_minute():
 
     last_brightness = None
 
-    while True:
+    while not shutdown_event.is_set():  # while True:
         any_other_failure_condition = True
 
         path = create_directory()
         img_name = datetime.now().strftime("%H-%M-%S.jpg")
         full_path = os.path.join(path, img_name)
 
-        request = picam2.capture_request()
-        request.save("main", full_path)
-        request.release()
+        try:
+            request = picam2.capture_request()
+            request.save("main", full_path)
+            request.release()
+        except Exception as e:
+            print(f"Error in save_pic_every_minute: {e}")
+            shutdown_event.set()
+            shutdown_server()
+            break  # Or handle the error as appropriate
 
         brightness = measure_brightness(full_path)
         print(f"Current brightness value: {brightness}")
@@ -485,6 +578,9 @@ def save_pic_every_minute():
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
+                if shutdown_event.is_set():
+                    print("shutdown_event triggered in save_pic_every_minute() (1)")
+                    break
                 pic_socket.settimeout(10)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
                 # Capture and send the picture
@@ -510,29 +606,43 @@ def save_pic_every_minute():
         if high_res_pic_sent or not any_other_failure_condition:
             watchdog.update_heartbeat()
 
+        # Sleep in smaller increments to allow for shutdown check
         sleep_time = 60
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
-        time.sleep(sleep_time)  # Sleep for 60 seconds before retaking next picture
+        for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
+            time.sleep(1)
+            if shutdown_event.is_set():
+                print("shutdown_event triggered in save_pic_every_minute() (2)")
+                break
+
+    print("save_pic_every_minute thread is shutting down")
 
 
-def read_sensor():
+def read_sensor() -> dict:
     humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
     if humidity is not None and temperature is not None:
         return {"temperature": temperature, "humidity": humidity}
     else:
         return {"temperature": "N/A", "humidity": "N/A"}
 
+
 def send_sensor_data():
-    while True:
+    while not shutdown_event.is_set():  # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
-                while True:
+                while not shutdown_event.is_set():  # while True...
                     sensor_data = read_sensor()
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
-                    time.sleep(10)  # Adjust as needed for sensor data frequency
+                    print("Sensor data sent...")
+                    print(sensor_data)
+                    time.sleep(60)  # Adjust as needed for sensor data frequency
+
+                    if shutdown_event.is_set():
+                        print("shutdown_event triggered in send_sensor_data() (1)")
+                        break
 
         except TimeoutError as e:
             print(f"Sensor data connection timed out: {e}. Retrying...")
@@ -544,32 +654,38 @@ def send_sensor_data():
 
         except Exception as e:
             print(f"Unexpected error in sending sensor data: {e}")
-            time.sleep(5)  # Wait before retrying
+            #time.sleep(5)  # Wait before retrying
+            shutdown_event.set()
+            shutdown_server()
+            break
 
-
-def send_high_res_picture():
-    while True:
-        pic_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
-        try:
-            pic_path = ''#save_high_res_picture()
-            with open(pic_path, 'rb') as pic_file:
-                pic_data = pic_file.read()
-                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
-        finally:
-            pic_socket.close()
-        time.sleep(60)  # Adjust for picture frequency
+    print("send_sensor_data thread is shutting down")
 
 
 if __name__ == '__main__':
+    # Watchdog start
+    watchdog_timeout = 60 * 3  # in seconds, adjust as needed
+    watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
+    watchdog.start()
+    print(watchdog.name, " : watchdog thread started")
+
+    # Start thread to send data
+    sensor_thread = Thread(target=send_sensor_data)
+    sensor_thread.daemon = True
+    sensor_thread.start()
+    print(sensor_thread.name, " : sensor_thread started")
+
     # Start the thread to save pictures every minute
     thread = Thread(target=save_pic_every_minute)
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
+    print(thread.name, " : thread started")
 
-    sensor_thread = Thread(target=send_sensor_data)
-    sensor_thread.daemon = True
-    sensor_thread.start()
+    # Start thread to send video
+    video_thread = Thread(target=send_video_frames)
+    video_thread.daemon = True
+    video_thread.start()
+    print(video_thread.name, " : video_thread started")
 
     # Create a server instance with threaded support
     server = ThreadedWSGIServer('0.0.0.0', 8000, app)
@@ -579,6 +695,14 @@ if __name__ == '__main__':
 
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt received, shutting down the server")
+        shutdown_server()
+    except Exception as e:
+        print(f"Unexpected error: {e}")
     finally:
-        picam2.stop_recording()
+        try:
+            picam2.stop_recording()
+        except Exception as e:
+            print(f"Error stopping camera recording during final cleanup: {e}")
         watchdog.stop()
