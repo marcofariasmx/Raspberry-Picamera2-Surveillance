@@ -23,7 +23,7 @@ cat <<EOL > $SCRIPT_DIR/start_in_tmux.sh
 # Change to the script directory
 cd "$SCRIPT_DIR"
 # Start the tmux session and run the Python script
-tmux new-session -d -s cam_session "sudo python3 flask_picam2_stream_and_pic.py"
+tmux new-session -d -s cam_session "sudo python run.py"
 EOL
 
 # Make the script executable

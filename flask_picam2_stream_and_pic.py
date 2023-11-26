@@ -1,14 +1,12 @@
 import json
-import threading
-
-from flask import Flask, Response, url_for, send_file, render_template, request, jsonify
+import numpy as np
+from flask import Flask, Response, url_for, send_file, render_template, jsonify
 from picamera2 import Picamera2
-#from picamera2.encoders import JpegEncoder
-#from picamera2.encoders import MJPEGEncoder
-from picamera2.encoders import H264Encoder
+from picamera2.encoders import H264Encoder  #JpegEncoder, MJPEGEncoder
 from picamera2.outputs import FileOutput
 import io
-from threading import Condition, Thread, Lock, Event
+import threading
+from threading import Condition, Thread, Event
 from datetime import datetime
 import cv2
 import os
@@ -17,15 +15,12 @@ import time
 import sys
 import socket
 import struct
-import requests
 from werkzeug.serving import ThreadedWSGIServer
 from socket import SOL_SOCKET, SO_REUSEADDR
 import libcamera
-import Adafruit_DHT
 
-# Sensor setup
-DHT_SENSOR = Adafruit_DHT.DHT22
-DHT_PIN = 4  # GPIO pin number
+from utils import WatchdogTimer, read_sensor
+
 
 # Global shutdown event
 shutdown_event = Event()
@@ -38,52 +33,28 @@ use_domain_name = False
 domain_name = 'marcofarias.com'
 ip_address = '192.168.100.10'
 receiver_ip = ''
-port = 5555
+VIDEO_PORT = 5555
 SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
+# Camera rotation if needed
+ROTATE_180 = True
 
-class WatchdogTimer(Thread):
-    def __init__(self, timeout, reset_callback):
-        Thread.__init__(self)
-        self.timeout = timeout
-        self.reset_callback = reset_callback
-        self.last_heartbeat = time.time()
-        self.lock = Lock()
-        self.running = True
-        self.heartbeat_count = 0
+CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
 
-    def run(self):
-        while self.running and not shutdown_event.is_set():
-            with self.lock:
-                if time.time() - self.last_heartbeat > self.timeout:
-                    print("Watchdog triggered reset")
-                    # Execute method in charge of reset
-                    self.reset_callback()
-            time.sleep(1)
+# Constants (in microseconds)
+if CAM_MODULE_V == 3:
+    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
+elif CAM_MODULE_V == 2:
+    MAX_EXPOSURE_TIME = int(1000000 * 10)
+elif CAM_MODULE_V == 1:
+    MAX_EXPOSURE_TIME = int(1000000 * .9)
+MIN_EXPOSURE_TIME = 100000
+EXPOSURE_INCREMENT = 50000
+DEFAULT_EXPOSURE_TIME = 100000
 
-    def update_heartbeat(self):
-        with self.lock:
-            self.last_heartbeat = time.time()
-        self.heartbeat_count += 1
-        print("heartbeat updated... count: ", str(self.heartbeat_count))
-        # # Only execute this for testing purposes
-        # if self.heartbeat_count == 3:
-        #     print("fake watchdog stop activated")
-        #     print("Watchdog triggered reset")
-        #     self.reset_callback()
-
-    def stop(self):
-        self.running = False
-
-
-def reset_system():
-    print("Resetting the system...")
-    try:
-        requests.post('http://localhost:8000/shutdown')
-    except Exception as e:
-        print(f"Error during shutdown: {e}")
-    os.execv(sys.executable, ['python'] + sys.argv)
+# Global variable to control saving automatically taken pictures to disk
+SAVE_TO_DISK = False
 
 
 def shutdown_server():
@@ -142,12 +113,6 @@ def shutdown_server():
     print("Shutdown complete.")
 
 
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    shutdown_server()
-    return 'Server shutting down...'
-
-
 @app.route('/manual_shutdown')
 def manual_shutdown():
     shutdown_server()
@@ -156,30 +121,13 @@ def manual_shutdown():
 
 @app.route('/complete_shutdown')
 def complete_shutdown():
+    """
+    This method exits the application sending a signal of 100, which in turn tells the main run app to stop re-executing
+    this program.
+    """
     shutdown_server()
     sys.exit(100)
     return 'Server shutting down...'
-
-
-@app.route('/manual_reboot')
-def manual_reboot():
-    print("Initiating manual reboot...")
-
-    # Gracefully shutdown the server and release resources
-    shutdown_server()
-
-    # Allow some time for resources to be cleaned up
-    time.sleep(5)
-
-    # Restart the script
-    print("Restarting script...")
-    os.execv(sys.executable, ['python'] + sys.argv)
-
-    return 'Server shutting down...'
-
-def perform_shutdown():
-    print("Resetting the system...")
-    shutdown_server()
 
 
 class StreamingOutput(io.BufferedIOBase):
@@ -217,7 +165,6 @@ initial_controls = {
 
 picam2.set_controls(initial_controls)
 
-ROTATE_180 = True
 if ROTATE_180:
     video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
 
@@ -243,9 +190,9 @@ def send_video_frames():
                 receiver_ip = ip_address
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((receiver_ip, port))
+                client_socket.connect((receiver_ip, VIDEO_PORT))
                 print("")
-                print(f"Connected to receiver at {receiver_ip}:{port}")
+                print(f"Connected to receiver at {receiver_ip}:{VIDEO_PORT}")
 
                 while not shutdown_event.is_set():  # while True:
                     yuv420 = picam2.capture_array("lores")
@@ -432,38 +379,36 @@ def create_directory():
     return path
 
 
-# Add this function to estimate the brightness of an image
-def measure_brightness(image_path):
-    img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+def measure_brightness(image_input):
+    """
+    Method to estimate the brightness of an image
+    :param image_input:
+    :return:
+    """
+    # Check if the input is a string (path) or a BytesIO object
+    if isinstance(image_input, str):  # It's a file path
+        img = cv2.imread(image_input, cv2.IMREAD_COLOR)
+    elif isinstance(image_input, io.BytesIO):  # It's a BytesIO object
+        img_buffer = np.frombuffer(image_input.getbuffer(), dtype=np.uint8)
+        img = cv2.imdecode(img_buffer, cv2.IMREAD_COLOR)
+    else:
+        raise ValueError("Unsupported input type")
+
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     _, _, v = cv2.split(hsv)
     return v.mean()  # Return the average brightness
 
 
-CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
+def save_pic_every_minute(save_to_disk: bool = False):
+    # Brightness thresholds with hysteresis buffers
+    LOW_BRIGHTNESS_THRESHOLD = 40
+    BUFFER_LOW = 45
+    HIGH_BRIGHTNESS_THRESHOLD = 60
+    BUFFER_HIGH = 55
+    DAY_BRIGHTNESS_THRESHOLD = 75
 
-# Constants (in microseconds)
-if CAM_MODULE_V == 3:
-    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
-elif CAM_MODULE_V == 2:
-    MAX_EXPOSURE_TIME = int(1000000 * 10)
-elif CAM_MODULE_V == 1:
-    MAX_EXPOSURE_TIME = int(1000000 * .9)
-MIN_EXPOSURE_TIME = 100000
-EXPOSURE_INCREMENT = 50000
-DEFAULT_EXPOSURE_TIME = 100000
+    BRIGHTNESS_CHANGE_THRESHOLD = 100
 
-# Brightness thresholds with hysteresis buffers
-LOW_BRIGHTNESS_THRESHOLD = 40
-BUFFER_LOW = 45
-HIGH_BRIGHTNESS_THRESHOLD = 60
-BUFFER_HIGH = 55
-DAY_BRIGHTNESS_THRESHOLD = 75
-
-BRIGHTNESS_CHANGE_THRESHOLD = 100
-
-
-def save_pic_every_minute():
     exposure_time = DEFAULT_EXPOSURE_TIME
 
     increasing_exposure = False
@@ -471,24 +416,35 @@ def save_pic_every_minute():
 
     last_brightness = None
 
+    is_daylight_reset_done = False  # Flag to track if reset has been done during current daylight period
+
     while not shutdown_event.is_set():  # while True:
         any_other_failure_condition = True
 
-        path = create_directory()
-        img_name = datetime.now().strftime("%H-%M-%S.jpg")
-        full_path = os.path.join(path, img_name)
+        # Take the picture
+        img_buffer = io.BytesIO()
 
+        # Always capture the image to memory first
         try:
             request = picam2.capture_request()
-            request.save("main", full_path)
-            request.release()
+            request.save("main", img_buffer, format='jpeg')
+            img_buffer.seek(0)
         except Exception as e:
-            print(f"Error in save_pic_every_minute: {e}")
+            print(f"Error in image capture: {e}")
             shutdown_event.set()
             shutdown_server()
             break  # Or handle the error as appropriate
 
-        brightness = measure_brightness(full_path)
+        # Conditionally save the image to disk
+        if save_to_disk:
+            path = create_directory()
+            img_name = datetime.now().strftime("%H-%M-%S.jpg")
+            full_path = os.path.join(path, img_name)
+            with open(full_path, 'wb') as f:
+                f.write(img_buffer.getvalue())
+            print(f"Image saved to disk at {full_path}")
+
+        brightness = measure_brightness(img_buffer)
         print(f"Current brightness value: {brightness}")
         print(f"Current exposure_time: {exposure_time}")
 
@@ -529,10 +485,12 @@ def save_pic_every_minute():
 
         # Reset to daytime settings
         if brightness > DAY_BRIGHTNESS_THRESHOLD:
-            if exposure_time <= MIN_EXPOSURE_TIME:
+            if not is_daylight_reset_done:
                 print("Brightness indicates daylight. Resetting to daytime settings.")
-                #Todo: FIX this so that it only gets reset once
-                reset()
+                reset()  # Call your reset method
+                is_daylight_reset_done = True
+        else:
+            is_daylight_reset_done = False  # Reset the flag if it's no longer daylight
 
         # Check for sudden brightness changes
         if last_brightness is not None:
@@ -569,7 +527,6 @@ def save_pic_every_minute():
 
         last_brightness = brightness  # Update the last brightness value
 
-        print(full_path + " SAVED!")
         any_other_failure_condition = False
 
         # Send the high resolution picture
@@ -583,14 +540,10 @@ def save_pic_every_minute():
                     break
                 pic_socket.settimeout(10)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
-                # Capture and send the picture
-                img_buffer = io.BytesIO()
-                request = picam2.capture_request()
-                request.save("main", img_buffer, format='jpeg')
-                img_buffer.seek(0)
-                pic_data = img_buffer.read()
-                request.release()
 
+                # Send the picture
+                img_buffer.seek(0)  # Reset the buffer position to the start
+                pic_data = img_buffer.read()
                 pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
@@ -616,14 +569,6 @@ def save_pic_every_minute():
                 break
 
     print("save_pic_every_minute thread is shutting down")
-
-
-def read_sensor() -> dict:
-    humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
-    if humidity is not None and temperature is not None:
-        return {"temperature": temperature, "humidity": humidity}
-    else:
-        return {"temperature": "N/A", "humidity": "N/A"}
 
 
 def send_sensor_data():
@@ -665,7 +610,7 @@ def send_sensor_data():
 if __name__ == '__main__':
     # Watchdog start
     watchdog_timeout = 60 * 3  # in seconds, adjust as needed
-    watchdog = WatchdogTimer(watchdog_timeout, perform_shutdown)
+    watchdog = WatchdogTimer(watchdog_timeout, reset_callback=shutdown_server, shutdown_event=shutdown_event)
     watchdog.start()
     print(watchdog.name, " : watchdog thread started")
 
@@ -676,7 +621,7 @@ if __name__ == '__main__':
     print(sensor_thread.name, " : sensor_thread started")
 
     # Start the thread to save pictures every minute
-    thread = Thread(target=save_pic_every_minute)
+    thread = Thread(target=save_pic_every_minute, args=(SAVE_TO_DISK,))
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
     print(thread.name, " : thread started")
