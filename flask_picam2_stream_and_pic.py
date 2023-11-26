@@ -103,29 +103,34 @@ def shutdown_server():
     current_thread = threading.current_thread()
     print("Current thread: ", current_thread.name)
 
+    # Define a timeout for thread joins
+    join_timeout = 10
+
     # Wait for threads to finish, skip if it's the current thread
     if thread.is_alive() and thread != current_thread:
         print("Waiting for save_pic_every_minute thread to finish...")
-        thread.join()
+        thread.join(timeout=join_timeout)
     else:
         print("save_pic_every_minute thread NOT ALIVE OR IS CURRENT THREAD...")
 
     if sensor_thread.is_alive() and sensor_thread != current_thread:
         print("Waiting for sensor_thread to finish...")
-        sensor_thread.join()
+        sensor_thread.join(timeout=join_timeout)
     else:
         print("sensor_thread NOT ALIVE OR IS CURRENT THREAD...")
 
     if video_thread.is_alive() and video_thread != current_thread:
         print("Waiting for video_thread to finish...")
-        video_thread.join()
+        video_thread.join(timeout=join_timeout)
     else:
         print("video_thread NOT ALIVE OR IS CURRENT THREAD...")
 
     if watchdog.is_alive() and current_thread != watchdog:
         print("Stopping watchdog...")
         watchdog.stop()
-        watchdog.join()
+        watchdog.join(timeout=join_timeout)
+        if watchdog.is_alive():
+            print("Warning: watchdog did not shut down cleanly.")
 
     print("Threads stopped. Checking server shutdown...")
 
