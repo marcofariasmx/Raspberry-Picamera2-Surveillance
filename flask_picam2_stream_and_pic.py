@@ -92,9 +92,12 @@ def shutdown_server():
     # Signal all threads to stop
     shutdown_event.set()
 
-    # Stopping camera
-    picam2.stop_recording()
-    print("picamera stopped")
+    # Safely stop camera recording
+    try:
+        picam2.stop_recording()
+        print("picamera stopped")
+    except Exception as e:
+        print(f"Error stopping camera recording: {e}")
 
     # Get the current thread
     current_thread = threading.current_thread()
@@ -470,9 +473,15 @@ def save_pic_every_minute():
         img_name = datetime.now().strftime("%H-%M-%S.jpg")
         full_path = os.path.join(path, img_name)
 
-        request = picam2.capture_request()
-        request.save("main", full_path)
-        request.release()
+        try:
+            request = picam2.capture_request()
+            request.save("main", full_path)
+            request.release()
+        except Exception as e:
+            print(f"Error in save_pic_every_minute: {e}")
+            shutdown_event.set()
+            shutdown_server()
+            break  # Or handle the error as appropriate
 
         brightness = measure_brightness(full_path)
         print(f"Current brightness value: {brightness}")
@@ -640,7 +649,10 @@ def send_sensor_data():
 
         except Exception as e:
             print(f"Unexpected error in sending sensor data: {e}")
-            time.sleep(5)  # Wait before retrying
+            #time.sleep(5)  # Wait before retrying
+            shutdown_event.set()
+            shutdown_server()
+            break
 
     print("send_sensor_data thread is shutting down")
 
@@ -678,11 +690,14 @@ if __name__ == '__main__':
 
     try:
         server.serve_forever()
-
     except KeyboardInterrupt:
         print("KeyboardInterrupt received, shutting down the server")
         shutdown_server()
-
+    except Exception as e:
+        print(f"Unexpected error: {e}")
     finally:
-        picam2.stop_recording()
+        try:
+            picam2.stop_recording()
+        except Exception as e:
+            print(f"Error stopping camera recording during final cleanup: {e}")
         watchdog.stop()
