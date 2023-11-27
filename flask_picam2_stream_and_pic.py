@@ -56,6 +56,9 @@ DEFAULT_EXPOSURE_TIME = 100000
 # Global variable to control saving automatically taken pictures to disk
 SAVE_TO_DISK = False
 
+# Sleep time (in seconds) between data reads and sending
+SLEEP_TIME = 30
+
 
 def shutdown_server():
     print("Initiating shutdown...")
@@ -425,7 +428,6 @@ def save_pic_every_minute(save_to_disk: bool = False):
     is_daylight_reset_done = False  # Flag to track if reset has been done during current daylight period
 
     while not shutdown_event.is_set():  # while True:
-        print("loop started...")
         any_other_failure_condition = True
 
         # Take the picture
@@ -566,11 +568,9 @@ def save_pic_every_minute(save_to_disk: bool = False):
             watchdog.update_heartbeat()
 
         # Sleep in smaller increments to allow for shutdown check
-        sleep_time = 5
-        print("Sleeping for the next ", str(sleep_time), " seconds... \n")
-        for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
+
+        for _ in range(SLEEP_TIME):  # Assuming you want to sleep for 60 seconds
             time.sleep(1)
-            print("sleeping second... ", str(_))
             if shutdown_event.is_set():
                 print("shutdown_event triggered in save_pic_every_minute() (2)")
                 break
@@ -590,11 +590,11 @@ def send_sensor_data():
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     print("Sensor data sent...")
                     print(sensor_data)
-                    time.sleep(60)  # Adjust as needed for sensor data frequency
-
-                    if shutdown_event.is_set():
-                        print("shutdown_event triggered in send_sensor_data() (1)")
-                        break
+                    for _ in range(SLEEP_TIME):  # Assuming you want to sleep for X seconds
+                        time.sleep(1)
+                        if shutdown_event.is_set():
+                            print("shutdown_event triggered in send_sensor_data() (1)")
+                            break
 
         except TimeoutError as e:
             print(f"Sensor data connection timed out: {e}. Retrying...")
