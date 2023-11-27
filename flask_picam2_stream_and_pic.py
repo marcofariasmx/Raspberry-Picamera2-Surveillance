@@ -190,7 +190,7 @@ def send_video_frames():
                 receiver_ip = ip_address
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.settimeout(5)
+                client_socket.settimeout(30)
                 client_socket.connect((receiver_ip, VIDEO_PORT))
                 print("")
                 print(f"Connected to receiver at {receiver_ip}:{VIDEO_PORT}")
@@ -389,12 +389,14 @@ def measure_brightness(image_input):
     :param image_input:
     :return:
     """
+    print("measure_brightness func entered")
     # Check if the input is a string (path) or a BytesIO object
     if isinstance(image_input, str):  # It's a file path
         img = cv2.imread(image_input, cv2.IMREAD_COLOR)
     elif isinstance(image_input, io.BytesIO):  # It's a BytesIO object
         img_buffer = np.frombuffer(image_input.getbuffer(), dtype=np.uint8)
         img = cv2.imdecode(img_buffer, cv2.IMREAD_COLOR)
+        image_input.seek(0)  # Reset buffer position
     else:
         raise ValueError("Unsupported input type")
 
@@ -457,6 +459,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
             print("Start increasing exposure_time due to low brightness.")
             increasing_exposure = True
             decreasing_exposure = False
+            is_daylight_reset_done = False  # Reset the flag if it's no longer daylight
 
         # Stop increasing exposure_time when brightness surpasses buffer high
         if brightness > BUFFER_HIGH:
@@ -487,12 +490,11 @@ def save_pic_every_minute(save_to_disk: bool = False):
 
         # Reset to daytime settings
         if brightness > DAY_BRIGHTNESS_THRESHOLD:
-            if not is_daylight_reset_done:
-                print("Brightness indicates daylight. Resetting to daytime settings.")
-                reset()  # Call your reset method
-                is_daylight_reset_done = True
-        else:
-            is_daylight_reset_done = False  # Reset the flag if it's no longer daylight
+            if exposure_time <= MIN_EXPOSURE_TIME:
+                if not is_daylight_reset_done:
+                    print("Brightness indicates daylight. Resetting to daytime settings.")
+                    reset()  # Call your reset method
+                    is_daylight_reset_done = True
 
         # Check for sudden brightness changes
         if last_brightness is not None:
@@ -540,7 +542,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
                 if shutdown_event.is_set():
                     print("shutdown_event triggered in save_pic_every_minute() (1)")
                     break
-                pic_socket.settimeout(10)  # Set a timeout for connection
+                pic_socket.settimeout(30)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
 
                 # Send the picture
@@ -577,7 +579,7 @@ def send_sensor_data():
     while not shutdown_event.is_set():  # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
-                sensor_socket.settimeout(5)  # Set a timeout for the connection, time in seconds
+                sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
                 while not shutdown_event.is_set():  # while True...
