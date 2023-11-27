@@ -32,12 +32,13 @@ class WatchdogTimer(Thread):
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout:
                     print("Watchdog triggered reset")
+                    self.final_run()
                     # Execute method in charge of reset
                     self.reset_callback()
-                    self.final_run()
             time.sleep(1)
 
     def final_run(self):
+        print("Final run watchdog activated")
         while self.running:
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout * 2:
