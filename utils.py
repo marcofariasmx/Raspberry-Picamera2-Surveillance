@@ -34,6 +34,7 @@ class WatchdogTimer(Thread):
                     print("Watchdog triggered reset")
                     # Execute method in charge of reset
                     self.reset_callback()
+                    self.final_run()
             time.sleep(1)
 
     def final_run(self):

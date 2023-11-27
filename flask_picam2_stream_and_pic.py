@@ -435,8 +435,6 @@ def save_pic_every_minute(save_to_disk: bool = False):
             img_buffer.seek(0)
         except Exception as e:
             print(f"Error in image capture: {e}")
-            shutdown_event.set()
-            shutdown_server()
             break  # Or handle the error as appropriate
 
         # Conditionally save the image to disk
@@ -604,8 +602,6 @@ def send_sensor_data():
         except Exception as e:
             print(f"Unexpected error in sending sensor data: {e}")
             #time.sleep(5)  # Wait before retrying
-            shutdown_event.set()
-            shutdown_server()
             break
 
         except socket.timeout:
