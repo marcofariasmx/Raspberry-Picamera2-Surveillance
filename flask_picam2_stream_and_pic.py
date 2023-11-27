@@ -568,6 +568,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
         for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
             time.sleep(1)
+            print("sleeping second... ", str(_))
             if shutdown_event.is_set():
                 print("shutdown_event triggered in save_pic_every_minute() (2)")
                 break
