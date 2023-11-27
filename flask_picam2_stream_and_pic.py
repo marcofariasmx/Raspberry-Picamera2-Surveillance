@@ -190,6 +190,7 @@ def send_video_frames():
                 receiver_ip = ip_address
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.settimeout(5)
                 client_socket.connect((receiver_ip, VIDEO_PORT))
                 print("")
                 print(f"Connected to receiver at {receiver_ip}:{VIDEO_PORT}")
@@ -208,6 +209,9 @@ def send_video_frames():
         except (BrokenPipeError, ConnectionResetError, socket.error) as e:
             print(f"Connection lost: {e}. Attempting to reconnect...")
             time.sleep(5)  # Wait before retrying
+
+        except socket.timeout:
+            continue  # Continue in the event of a timeout
 
         # Check for shutdown event at a suitable place in your loop
         if shutdown_event.is_set():
@@ -575,7 +579,7 @@ def send_sensor_data():
     while not shutdown_event.is_set():  # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
-                sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
+                sensor_socket.settimeout(5)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
                 while not shutdown_event.is_set():  # while True...
@@ -602,6 +606,12 @@ def send_sensor_data():
             #time.sleep(5)  # Wait before retrying
             shutdown_event.set()
             shutdown_server()
+            break
+
+        except socket.timeout:
+            continue  # Continue in the event of a timeout
+
+        if shutdown_event.is_set():
             break
 
     print("send_sensor_data thread is shutting down")

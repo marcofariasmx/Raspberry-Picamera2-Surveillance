@@ -1,3 +1,4 @@
+import sys
 from threading import Thread, Lock, Event
 import time
 import Adafruit_DHT
@@ -5,6 +6,7 @@ import Adafruit_DHT
 # Sensor setup
 DHT_SENSOR = Adafruit_DHT.DHT22
 DHT_PIN = 4  # GPIO pin number
+
 
 def read_sensor() -> dict:
     humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
@@ -33,6 +35,13 @@ class WatchdogTimer(Thread):
                     # Execute method in charge of reset
                     self.reset_callback()
             time.sleep(1)
+
+    def final_run(self):
+        while self.running:
+            with self.lock:
+                if time.time() - self.last_heartbeat > self.timeout * 2:
+                    print("Something failed shutting down the system, exiting the hard way...")
+                    sys.exit(2)
 
     def update_heartbeat(self):
         with self.lock:
