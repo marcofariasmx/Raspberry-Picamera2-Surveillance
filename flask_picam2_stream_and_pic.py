@@ -435,6 +435,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
         try:
             request = picam2.capture_request()
             request.save("main", img_buffer, format='jpeg')
+            request.release()
             img_buffer.seek(0)
         except Exception as e:
             print(f"Error in image capture: {e}")
