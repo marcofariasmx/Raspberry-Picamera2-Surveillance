@@ -1,3 +1,4 @@
+import os
 import sys
 from threading import Thread, Lock, Event
 import time
@@ -48,7 +49,7 @@ class WatchdogTimer(Thread):
             with self.lock:
                 if time.time() - self.last_heartbeat > self.timeout * 2:
                     print("Something failed shutting down the system, exiting the hard way...")
-                    sys.exit(2)
+                    os._exit(2)
 
     def update_heartbeat(self):
         with self.lock:
