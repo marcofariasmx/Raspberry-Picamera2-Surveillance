@@ -425,6 +425,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
     is_daylight_reset_done = False  # Flag to track if reset has been done during current daylight period
 
     while not shutdown_event.is_set():  # while True:
+        print("loop started...")
         any_other_failure_condition = True
 
         # Take the picture
@@ -564,7 +565,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
             watchdog.update_heartbeat()
 
         # Sleep in smaller increments to allow for shutdown check
-        sleep_time = 60
+        sleep_time = 5
         print("Sleeping for the next ", str(sleep_time), " seconds... \n")
         for _ in range(sleep_time):  # Assuming you want to sleep for 60 seconds
             time.sleep(1)
