@@ -568,7 +568,7 @@ def save_pic_every_minute(save_to_disk: bool = False):
             watchdog.update_heartbeat()
 
         # Sleep in smaller increments to allow for shutdown check
-
+        print("Sleeping for the next ", str(SLEEP_TIME), " seconds... \n")
         for _ in range(SLEEP_TIME):  # Assuming you want to sleep for 60 seconds
             time.sleep(1)
             if shutdown_event.is_set():
