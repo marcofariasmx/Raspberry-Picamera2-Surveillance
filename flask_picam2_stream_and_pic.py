@@ -621,6 +621,7 @@ if __name__ == '__main__':
     # Watchdog start
     watchdog_timeout = 60 * 3  # in seconds, adjust as needed
     watchdog = WatchdogTimer(watchdog_timeout, reset_callback=shutdown_server, shutdown_event=shutdown_event)
+    watchdog.daemon = True
     watchdog.start()
     print(watchdog.name, " : watchdog thread started")
 
