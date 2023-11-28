@@ -392,7 +392,6 @@ def measure_brightness(image_input):
     :param image_input:
     :return:
     """
-    print("measure_brightness func entered")
     # Check if the input is a string (path) or a BytesIO object
     if isinstance(image_input, str):  # It's a file path
         img = cv2.imread(image_input, cv2.IMREAD_COLOR)
