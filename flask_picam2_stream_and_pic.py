@@ -29,7 +29,7 @@ shutdown_event = Event()
 app = Flask(__name__)
 
 # Connection parameters
-use_domain_name = False
+use_domain_name = True
 domain_name = 'marcofarias.com'
 ip_address = '192.168.100.10'
 receiver_ip = ''
@@ -38,7 +38,7 @@ SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
 # Camera rotation if needed
-ROTATE_180 = True
+ROTATE_180 = False
 
 CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
 
