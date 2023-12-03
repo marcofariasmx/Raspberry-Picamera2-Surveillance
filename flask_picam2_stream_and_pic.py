@@ -7,7 +7,6 @@ and supports dynamic image processing. It's designed for use in remote monitorin
 
 import json
 import subprocess
-import datetime
 import psutil
 import numpy as np
 from flask import Flask, Response, url_for, send_file, render_template, jsonify
@@ -662,7 +661,7 @@ def send_data():
                     sensor_data['system_uptime'] = get_system_uptime()
                     sensor_data['used_ram'] = get_used_ram()
                     sensor_data['used_disk'] = get_used_disk()
-                    sensor_data['datetime'] = datetime.datetime.now().isoformat()
+                    sensor_data['datetime'] = datetime.now().isoformat()
 
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     print("Sensor data sent...")
