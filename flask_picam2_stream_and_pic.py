@@ -630,10 +630,12 @@ def get_cpu_temp():
 
 def get_system_uptime():
     try:
-        with open('/proc/uptime', 'r') as f:
-            uptime_seconds = float(f.readline().split()[0])
-            return str(datetime.timedelta(seconds=uptime_seconds))
-    except:
+        boot_time = datetime.fromtimestamp(psutil.boot_time())
+        now = datetime.now()
+        uptime = now - boot_time
+        return str(uptime)
+    except Exception as e:
+        print(f"Error getting system uptime: {e}")
         return None
 
 
