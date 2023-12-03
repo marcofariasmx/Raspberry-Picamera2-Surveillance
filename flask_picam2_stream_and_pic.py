@@ -1,3 +1,10 @@
+"""
+This module implements a Flask-based web server with functionalities for streaming video and sensor data.
+It interfaces with a camera using picamera2, provides routes for camera control, sensor data retrieval,
+and supports dynamic image processing. It's designed for use in remote monitoring or surveillance systems.
+"""
+
+
 import json
 import numpy as np
 from flask import Flask, Response, url_for, send_file, render_template, jsonify
@@ -61,6 +68,11 @@ SLEEP_TIME = 30
 
 
 def shutdown_server():
+    """
+    Initiates the shutdown process for the server and related threads.
+
+    This function signals all threads to stop, safely stops camera recording, and shuts down the Flask server.
+    """
     print("Initiating shutdown...")
 
     # Signal all threads to stop
@@ -118,6 +130,14 @@ def shutdown_server():
 
 @app.route('/manual_shutdown')
 def manual_shutdown():
+    """
+    Flask route to manually initiate server shutdown.
+
+    This route triggers the shutdown of the server when accessed.
+
+    Returns:
+        str: A message indicating that the server is shutting down.
+    """
     shutdown_server()
     return 'Server shutting down...'
 
@@ -134,11 +154,31 @@ def complete_shutdown():
 
 
 class StreamingOutput(io.BufferedIOBase):
+    """
+        A custom output class for handling streaming video data from the camera.
+
+        Attributes:
+            frame (bytes): The current video frame.
+            condition (threading.Condition): A condition variable for thread synchronization.
+
+        Methods:
+            write(buf): Writes the given buffer to the frame attribute.
+        """
+
     def __init__(self):
+        """
+        Initializes the StreamingOutput with default values.
+        """
         self.frame = None
         self.condition = Condition()
 
     def write(self, buf):
+        """
+        Writes the given buffer to the frame attribute.
+
+        Args:
+            buf (bytes): A buffer containing video frame data.
+        """
         with self.condition:
             self.frame = buf
             self.condition.notify_all()
@@ -407,7 +447,7 @@ def measure_brightness(image_input):
     return v.mean()  # Return the average brightness
 
 
-def save_pic_every_minute(save_to_disk: bool = False):
+def take_timed_picture(save_to_disk: bool = False):
     # Brightness thresholds with hysteresis buffers
     LOW_BRIGHTNESS_THRESHOLD = 40
     BUFFER_LOW = 45
@@ -632,7 +672,7 @@ if __name__ == '__main__':
     print(sensor_thread.name, " : sensor_thread started")
 
     # Start the thread to save pictures every minute
-    thread = Thread(target=save_pic_every_minute, args=(SAVE_TO_DISK,))
+    thread = Thread(target=take_timed_picture, args=(SAVE_TO_DISK,))
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
     print(thread.name, " : thread started")
