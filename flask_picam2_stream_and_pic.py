@@ -6,6 +6,9 @@ and supports dynamic image processing. It's designed for use in remote monitorin
 
 
 import json
+import subprocess
+import datetime
+import psutil
 import numpy as np
 from flask import Flask, Response, url_for, send_file, render_template, jsonify
 from picamera2 import Picamera2
@@ -99,9 +102,9 @@ def shutdown_server():
     else:
         print("save_pic_every_minute thread NOT ALIVE OR IS CURRENT THREAD...")
 
-    if sensor_thread.is_alive() and sensor_thread != current_thread:
+    if send_data_thread.is_alive() and send_data_thread != current_thread:
         print("Waiting for sensor_thread to finish...")
-        sensor_thread.join(timeout=join_timeout)
+        send_data_thread.join(timeout=join_timeout)
     else:
         print("sensor_thread NOT ALIVE OR IS CURRENT THREAD...")
 
@@ -617,7 +620,35 @@ def take_timed_picture(save_to_disk: bool = False):
     print("save_pic_every_minute thread is shutting down")
 
 
-def send_sensor_data():
+def get_cpu_temp():
+    # For Raspberry Pi
+    try:
+        temp = subprocess.check_output(["vcgencmd", "measure_temp"]).decode()
+        return float(temp.replace("temp=", "").replace("'C\n", ""))
+    except:
+        return None
+
+
+def get_system_uptime():
+    try:
+        with open('/proc/uptime', 'r') as f:
+            uptime_seconds = float(f.readline().split()[0])
+            return str(datetime.timedelta(seconds=uptime_seconds))
+    except:
+        return None
+
+
+def get_used_ram():
+    ram = psutil.virtual_memory()
+    return ram.used / (1024 ** 2)  # MB
+
+
+def get_used_disk():
+    disk = psutil.disk_usage('/')
+    return disk.used / (1024 ** 3)  # GB
+
+
+def send_data():
     while not shutdown_event.is_set():  # while True...
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
@@ -626,6 +657,13 @@ def send_sensor_data():
 
                 while not shutdown_event.is_set():  # while True...
                     sensor_data = read_sensor()
+                    # Add additional data
+                    sensor_data['cpu_temp'] = get_cpu_temp()
+                    sensor_data['system_uptime'] = get_system_uptime()
+                    sensor_data['used_ram'] = get_used_ram()
+                    sensor_data['used_disk'] = get_used_disk()
+                    sensor_data['datetime'] = datetime.datetime.now().isoformat()
+
                     sensor_socket.sendall(json.dumps(sensor_data).encode())
                     print("Sensor data sent...")
                     print(sensor_data)
@@ -666,10 +704,10 @@ if __name__ == '__main__':
     print(watchdog.name, " : watchdog thread started")
 
     # Start thread to send data
-    sensor_thread = Thread(target=send_sensor_data)
-    sensor_thread.daemon = True
-    sensor_thread.start()
-    print(sensor_thread.name, " : sensor_thread started")
+    send_data_thread = Thread(target=send_data)
+    send_data_thread.daemon = True
+    send_data_thread.start()
+    print(send_data_thread.name, " : sensor_thread started")
 
     # Start the thread to save pictures every minute
     thread = Thread(target=take_timed_picture, args=(SAVE_TO_DISK,))
