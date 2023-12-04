@@ -37,6 +37,9 @@ frame_queue = SingleItemQueue()
 received_data = {}
 lock = threading.Lock()
 
+# Define a path for the JSON file
+SENSOR_DATA_FILE = 'received_data.json'
+
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
 if not os.path.exists(HIGH_RES_IMAGES_DIR):
@@ -74,6 +77,15 @@ def handle_video_stream(client_socket):
     finally:
         client_socket.close()
 
+
+def save_received_data_to_file(data):
+    try:
+        with open(SENSOR_DATA_FILE, 'w') as file:
+            json.dump(data, file, indent=4)
+            print("Sensor data saved to file.")
+    except Exception as e:
+        print(f"Error saving sensor data to file: {e}")
+
 def handle_received_data(client_socket):
     global received_data
     try:
@@ -81,6 +93,10 @@ def handle_received_data(client_socket):
             data = client_socket.recv(1024).decode()
             if not data: break
             received_data = json.loads(data)
+
+            # Save data to file
+            save_received_data_to_file(received_data)
+
             temperature = received_data.get('temperature', 'N/A')
             humidity = received_data.get('humidity', 'N/A')
 
