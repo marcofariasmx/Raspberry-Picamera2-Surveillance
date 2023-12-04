@@ -1,3 +1,4 @@
+import csv
 from flask import Flask, Response, url_for, render_template
 import os
 import datetime
@@ -37,8 +38,8 @@ frame_queue = SingleItemQueue()
 received_data = {}
 lock = threading.Lock()
 
-# Define a path for the JSON file
-SENSOR_DATA_FILE = 'received_data.json'
+# Define a path for the CSV file
+RECEIVED_DATA_FILE = 'received_data.csv'
 
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
@@ -78,13 +79,16 @@ def handle_video_stream(client_socket):
         client_socket.close()
 
 
-def save_received_data_to_file(data):
-    try:
-        with open(SENSOR_DATA_FILE, 'w') as file:
-            json.dump(data, file, indent=4)
-            print("Sensor data saved to file.")
-    except Exception as e:
-        print(f"Error saving sensor data to file: {e}")
+def save_received_data_to_csv(data):
+    file_exists = os.path.isfile(RECEIVED_DATA_FILE)
+    with open(RECEIVED_DATA_FILE, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=data.keys())
+
+        if not file_exists:
+            writer.writeheader()  # Write the header only once
+
+        writer.writerow(data)
+        print("Received data appended to CSV file.")
 
 def handle_received_data(client_socket):
     global received_data
@@ -94,8 +98,8 @@ def handle_received_data(client_socket):
             if not data: break
             received_data = json.loads(data)
 
-            # Save data to file
-            save_received_data_to_file(received_data)
+            # Save data to CSV
+            save_received_data_to_csv(received_data)
 
             temperature = received_data.get('temperature', 'N/A')
             humidity = received_data.get('humidity', 'N/A')
