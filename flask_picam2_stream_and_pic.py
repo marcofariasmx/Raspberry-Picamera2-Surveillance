@@ -49,19 +49,6 @@ HIGH_RES_PIC_PORT = 5557
 # Camera rotation if needed
 ROTATE_180 = True
 
-CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
-
-# Constants (in microseconds)
-if CAM_MODULE_V == 3:
-    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
-elif CAM_MODULE_V == 2:
-    MAX_EXPOSURE_TIME = int(1000000 * 10)
-elif CAM_MODULE_V == 1:
-    MAX_EXPOSURE_TIME = int(1000000 * .9)
-MIN_EXPOSURE_TIME = 100000
-EXPOSURE_INCREMENT = 50000
-DEFAULT_EXPOSURE_TIME = 100000
-
 # Global variable to control saving automatically taken pictures to disk
 SAVE_TO_DISK = False
 
@@ -186,6 +173,24 @@ class StreamingOutput(io.BufferedIOBase):
             self.condition.notify_all()
 
 
+def get_raspberry_pi_model():
+    try:
+        with open('/proc/device-tree/model', 'r') as f:
+            model = f.read()
+        return model.strip()  # Remove any trailing whitespace
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# Usage
+pi_model = get_raspberry_pi_model()
+print(f"Raspberry Pi Model: {pi_model}")
+
+if pi_model == 'Raspberry Pi Zero 2 W Rev 1.0':
+    buffer_count = 4
+else:
+    buffer_count = 8
+
 picam2 = Picamera2()
 
 full_resolution = picam2.sensor_resolution
@@ -196,7 +201,7 @@ print(full_resolution)
 video_config = picam2.create_video_configuration(main={"size": full_resolution, "format": "RGB888"},
                                                  lores={"size": (640, 480)},
                                                  encode="lores",
-                                                 buffer_count=4)    # Need to decrease this to 2-3 in the raspberry pi
+                                                 buffer_count=buffer_count)    # Need to decrease this to 2-3 in the raspberry pi
                                                                     # zero 2 w to avoid running out of memory when using
                                                                     # the full sensor resolution, specially on the
                                                                     # camera module 3.
@@ -209,6 +214,34 @@ initial_controls = {
 }
 
 picam2.set_controls(initial_controls)
+
+CAM_MODULE_V = 2  # Indicates whether it is the cam module 1, 2, 3...
+
+# Assuming typical Raspberry Pi camera models
+if full_resolution == (4608, 2592):
+    print("Camera Module v3 detected")
+    CAM_MODULE_V = 3
+elif full_resolution == (3280, 2464):
+    print("Camera Module v2 detected")
+    CAM_MODULE_V = 2
+elif full_resolution == (2592, 1944):
+    print("Camera Module v1")
+    CAM_MODULE_V = 1
+elif full_resolution == (4056, 3040):
+    print("HQ Camera")
+else:
+    print("Unknown Camera Model")
+
+# Constants (in microseconds)
+if CAM_MODULE_V == 3:
+    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
+elif CAM_MODULE_V == 2:
+    MAX_EXPOSURE_TIME = int(1000000 * 10)
+elif CAM_MODULE_V == 1:
+    MAX_EXPOSURE_TIME = int(1000000 * .9)
+MIN_EXPOSURE_TIME = 100000
+EXPOSURE_INCREMENT = 50000
+DEFAULT_EXPOSURE_TIME = 100000
 
 if ROTATE_180:
     video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
