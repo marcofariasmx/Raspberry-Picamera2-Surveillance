@@ -42,9 +42,9 @@ use_domain_name = True
 domain_name = 'marcofarias.com'
 ip_address = '192.168.100.10'
 receiver_ip = ''
-VIDEO_PORT = 5555
+VIDEO_PORT = 5557
 SENSOR_DATA_PORT = 5556
-HIGH_RES_PIC_PORT = 5557
+HIGH_RES_PIC_PORT = 5555
 
 # Camera rotation if needed
 ROTATE_180 = True
@@ -238,7 +238,7 @@ def send_video_frames():
                 client_socket.settimeout(30)
                 client_socket.connect((receiver_ip, VIDEO_PORT))
                 print("")
-                print(f"Connected to receiver at {receiver_ip}:{VIDEO_PORT}")
+                print(f"Connected to video receiver at {receiver_ip}:{VIDEO_PORT}")
 
                 while not shutdown_event.is_set():  # while True:
                     yuv420 = picam2.capture_array("lores")
@@ -597,7 +597,7 @@ def take_timed_picture(save_to_disk: bool = False):
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
 
                 print("")
-                print(f"Connected to receiver at {receiver_ip}:{HIGH_RES_PIC_PORT}")
+                print(f"Connected to image receiver at {receiver_ip}:{HIGH_RES_PIC_PORT}")
 
                 # Send the picture
                 img_buffer.seek(0)  # Reset the buffer position to the start
@@ -682,7 +682,7 @@ def send_data():
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
                 print("")
-                print(f"Connected to receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
+                print(f"Connected to data receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
 
                 while not shutdown_event.is_set():  # while True...
                     sensor_data = read_sensor()
@@ -742,7 +742,7 @@ if __name__ == '__main__':
     thread = Thread(target=take_timed_picture, args=(SAVE_TO_DISK,))
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
-    print(thread.name, " : thread started")
+    print(thread.name, " : send image thread started")
 
     # Start thread to send video
     video_thread = Thread(target=send_video_frames)
