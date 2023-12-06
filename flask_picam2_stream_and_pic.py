@@ -593,7 +593,7 @@ def take_timed_picture(save_to_disk: bool = False):
                 if shutdown_event.is_set():
                     print("shutdown_event triggered in take_timed_picture() (1)")
                     break
-                pic_socket.settimeout(60)  # Set a timeout for connection
+                pic_socket.settimeout(30)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
 
                 print("")
