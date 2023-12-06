@@ -190,6 +190,7 @@ if pi_model == 'Raspberry Pi Zero 2 W Rev 1.0':
     buffer_count = 4
 else:
     buffer_count = 8
+print(f"Allocating {buffer_count} buffers")
 
 picam2 = Picamera2()
 
