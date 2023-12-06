@@ -593,7 +593,16 @@ def take_timed_picture(save_to_disk: bool = False):
                 # Send the picture
                 img_buffer.seek(0)  # Reset the buffer position to the start
                 pic_data = img_buffer.read()
-                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+                print("High-resolution picture taken.")
+                #pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+
+                total_length = len(pic_data)
+                pic_socket.sendall(struct.pack("Q", total_length))
+                # Send the picture in chunks
+                chunk_size = 1024  # You can adjust this size
+                for i in range(0, total_length, chunk_size):
+                    print("sent chunk... " + str(i))
+                    pic_socket.sendall(pic_data[i:i + chunk_size])
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
 
