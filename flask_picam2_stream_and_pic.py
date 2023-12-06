@@ -6,6 +6,7 @@ and supports dynamic image processing. It's designed for use in remote monitorin
 
 
 import json
+import re
 import subprocess
 import psutil
 import numpy as np
@@ -182,11 +183,18 @@ def get_raspberry_pi_model():
         return f"Error: {e}"
 
 
-# Usage
-pi_model = get_raspberry_pi_model()
-print(f"Raspberry Pi Model: {pi_model}")
+def normalize_string(s):
+    # Remove special characters using regular expressions
+    s = re.sub(r'[^A-Za-z0-9 ]+', '', s)
+    # Convert to lower case and strip whitespace
+    return s.lower().strip()
 
-if pi_model == 'Raspberry Pi Zero 2 W Rev 1.0':
+
+pi_model = get_raspberry_pi_model()  # Assuming this is your function to get the model
+print(f"Raspberry Pi Model: {pi_model}")
+normalized_model = normalize_string(pi_model)
+
+if 'raspberry pi zero 2 w rev 10' in normalized_model:
     buffer_count = 4
 else:
     buffer_count = 8
