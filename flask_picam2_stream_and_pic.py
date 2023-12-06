@@ -602,18 +602,20 @@ def take_timed_picture(save_to_disk: bool = False):
                 # Send the picture
                 img_buffer.seek(0)  # Reset the buffer position to the start
                 pic_data = img_buffer.read()
-                print("High-resolution picture taken.")
-                #pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
-
-                total_length = len(pic_data)
-                pic_socket.sendall(struct.pack("Q", total_length))
-                # Send the picture in chunks
-                chunk_size = 1024  # You can adjust this size
-                for i in range(0, total_length, chunk_size):
-                    print("sent chunk... " + str(i))
-                    pic_socket.sendall(pic_data[i:i + chunk_size])
+                print("High-resolution picture ready.")
+                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
+
+                # total_length = len(pic_data)
+                # pic_socket.sendall(struct.pack("Q", total_length))
+                # # Send the picture in chunks
+                # chunk_size = 1024  # You can adjust this size
+                # for i in range(0, total_length, chunk_size):
+                #     pic_socket.sendall(pic_data[i:i + chunk_size])
+                # print("High-resolution picture sent.")
+                # high_res_pic_sent = True
+
 
         except TimeoutError as e:
             print(f"High-res picture connection timed out: {e}. Retrying...")
@@ -742,7 +744,7 @@ if __name__ == '__main__':
     thread = Thread(target=take_timed_picture, args=(SAVE_TO_DISK,))
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
-    print(thread.name, " : send image thread started")
+    print(thread.name, " : send_timed_image thread started")
 
     # Start thread to send video
     video_thread = Thread(target=send_video_frames)
