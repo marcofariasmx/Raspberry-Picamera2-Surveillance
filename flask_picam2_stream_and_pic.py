@@ -42,9 +42,9 @@ use_domain_name = True
 domain_name = 'marcofarias.com'
 ip_address = '192.168.100.10'
 receiver_ip = ''
-VIDEO_PORT = 5557
+VIDEO_PORT = 5555
 SENSOR_DATA_PORT = 5556
-HIGH_RES_PIC_PORT = 5555
+HIGH_RES_PIC_PORT = 5557
 
 # Camera rotation if needed
 ROTATE_180 = True
