@@ -582,6 +582,12 @@ def take_timed_picture(save_to_disk: bool = False):
         # Initialize a flag to check if the high-res picture was sent
         high_res_pic_sent = False
 
+        # Resolve domain name to IP address
+        if use_domain_name:
+            receiver_ip = socket.gethostbyname(domain_name)
+        else:
+            receiver_ip = ip_address
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
                 if shutdown_event.is_set():
@@ -660,6 +666,13 @@ def get_used_disk():
 
 def send_data():
     while not shutdown_event.is_set():  # while True...
+
+        # Resolve domain name to IP address
+        if use_domain_name:
+            receiver_ip = socket.gethostbyname(domain_name)
+        else:
+            receiver_ip = ip_address
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
