@@ -207,6 +207,7 @@ def index():
     stream_url = url_for('video_feed')
     # Use global sensor data
     global received_data
+    # Todo: fix whenever there is no latest_image
     return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=received_data)
 
 def generate_frames():

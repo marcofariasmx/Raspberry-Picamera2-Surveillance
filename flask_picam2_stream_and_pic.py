@@ -196,7 +196,7 @@ print(full_resolution)
 video_config = picam2.create_video_configuration(main={"size": full_resolution, "format": "RGB888"},
                                                  lores={"size": (640, 480)},
                                                  encode="lores",
-                                                 buffer_count=8)    # Need to decrease this to 2-3 in the raspberry pi
+                                                 buffer_count=4)    # Need to decrease this to 2-3 in the raspberry pi
                                                                     # zero 2 w to avoid running out of memory when using
                                                                     # the full sensor resolution, specially on the
                                                                     # camera module 3.
@@ -585,9 +585,9 @@ def take_timed_picture(save_to_disk: bool = False):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
                 if shutdown_event.is_set():
-                    print("shutdown_event triggered in save_pic_every_minute() (1)")
+                    print("shutdown_event triggered in take_timed_picture() (1)")
                     break
-                pic_socket.settimeout(30)  # Set a timeout for connection
+                pic_socket.settimeout(60)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
 
                 # Send the picture

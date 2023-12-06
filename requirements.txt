@@ -2,3 +2,5 @@ opencv-python
 flask
 picamera2
 Adafruit_DHT
+numpy
+psutil
