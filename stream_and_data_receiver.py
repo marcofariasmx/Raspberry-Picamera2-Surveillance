@@ -120,29 +120,54 @@ def handle_high_res_picture(client_socket):
         payload_size = struct.calcsize("Q")
         data = b""
         while True:
+            # First, receive the size of the sender's ID
             while len(data) < payload_size:
                 packet = client_socket.recv(4 * 1024)
                 if not packet: return
                 data += packet
 
+            # Extract the size of the sender's ID
+            packed_id_size = data[:payload_size]
+            data = data[payload_size:]
+            id_size = struct.unpack("Q", packed_id_size)[0]
+
+            # Now, receive the sender's ID
+            while len(data) < id_size:
+                data += client_socket.recv(4 * 1024)
+
+            # Extract the sender's ID
+            sender_id = data[:id_size].decode()
+            data = data[id_size:]
+
+            print(f"Received high-resolution image from sender: {sender_id}")
+
+            # Next, receive the size of the image
+            while len(data) < payload_size:
+                data += client_socket.recv(4 * 1024)
+
+            # Extract the size of the image
             packed_msg_size = data[:payload_size]
             data = data[payload_size:]
             msg_size = struct.unpack("Q", packed_msg_size)[0]
 
+            # Now, receive the image
             while len(data) < msg_size:
                 data += client_socket.recv(4 * 1024)
 
+            # Extract the image
             frame_data = data[:msg_size]
             data = data[msg_size:]
 
+            # Process and save the image
             image = np.frombuffer(frame_data, dtype=np.uint8)
             image = cv2.imdecode(image, cv2.IMREAD_COLOR)
+
             # Current date and time
             current_date = datetime.datetime.now().strftime("%Y-%m-%d")
             current_time = datetime.datetime.now().strftime("%H-%M-%S")
 
-            # Create directory path for current date
-            date_directory = os.path.join(HIGH_RES_IMAGES_DIR, current_date)
+            # Create directory path for current date and sender ID
+            date_directory = os.path.join(HIGH_RES_IMAGES_DIR, sender_id, current_date)
 
             # Make sure the directory exists
             os.makedirs(date_directory, exist_ok=True)
@@ -150,9 +175,10 @@ def handle_high_res_picture(client_socket):
             # Define the full path for the image
             image_path = os.path.join(date_directory, f'{current_time}.jpg')
 
-            # Save the image (assuming 'image' is your image data)
+            # Save the image
             cv2.imwrite(image_path, image)
             print("Saved high-resolution image:", image_path)
+
     except Exception as e:
         print(f"High-res picture connection lost: {e}")
     finally:

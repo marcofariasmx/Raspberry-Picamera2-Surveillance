@@ -56,6 +56,10 @@ SAVE_TO_DISK = False
 # Sleep time (in seconds) between data reads and sending
 SLEEP_TIME = 30
 
+# Unique identifier for the sender
+sender_id = socket.gethostname()  # or any other unique identifier
+sender_id_encoded = sender_id.encode()
+
 
 def shutdown_server():
     """
@@ -645,7 +649,13 @@ def take_timed_picture(save_to_disk: bool = False):
                 img_buffer.seek(0)  # Reset the buffer position to the start
                 pic_data = img_buffer.read()
                 print("High-resolution picture ready.")
-                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+
+                # Combine ID and picture into a single message
+                message = struct.pack("Q", len(sender_id_encoded)) + sender_id_encoded
+                message += struct.pack("Q", len(pic_data)) + pic_data
+
+                # Send the combined message
+                pic_socket.sendall(message)
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
 
