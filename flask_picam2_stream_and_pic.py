@@ -6,6 +6,9 @@ and supports dynamic image processing. It's designed for use in remote monitorin
 
 
 import json
+import re
+import subprocess
+import psutil
 import numpy as np
 from flask import Flask, Response, url_for, send_file, render_template, jsonify
 from picamera2 import Picamera2
@@ -45,20 +48,7 @@ SENSOR_DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
 # Camera rotation if needed
-ROTATE_180 = False
-
-CAM_MODULE_V = 3  # Indicates whether it is the cam module 1, 2, 3...
-
-# Constants (in microseconds)
-if CAM_MODULE_V == 3:
-    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
-elif CAM_MODULE_V == 2:
-    MAX_EXPOSURE_TIME = int(1000000 * 10)
-elif CAM_MODULE_V == 1:
-    MAX_EXPOSURE_TIME = int(1000000 * .9)
-MIN_EXPOSURE_TIME = 100000
-EXPOSURE_INCREMENT = 50000
-DEFAULT_EXPOSURE_TIME = 100000
+ROTATE_180 = True
 
 # Global variable to control saving automatically taken pictures to disk
 SAVE_TO_DISK = False
@@ -99,9 +89,9 @@ def shutdown_server():
     else:
         print("save_pic_every_minute thread NOT ALIVE OR IS CURRENT THREAD...")
 
-    if sensor_thread.is_alive() and sensor_thread != current_thread:
+    if send_data_thread.is_alive() and send_data_thread != current_thread:
         print("Waiting for sensor_thread to finish...")
-        sensor_thread.join(timeout=join_timeout)
+        send_data_thread.join(timeout=join_timeout)
     else:
         print("sensor_thread NOT ALIVE OR IS CURRENT THREAD...")
 
@@ -184,6 +174,32 @@ class StreamingOutput(io.BufferedIOBase):
             self.condition.notify_all()
 
 
+def get_raspberry_pi_model():
+    try:
+        with open('/proc/device-tree/model', 'r') as f:
+            model = f.read()
+        return model.strip()  # Remove any trailing whitespace
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def normalize_string(s):
+    # Remove special characters using regular expressions
+    s = re.sub(r'[^A-Za-z0-9 ]+', '', s)
+    # Convert to lower case and strip whitespace
+    return s.lower().strip()
+
+
+pi_model = get_raspberry_pi_model()  # Assuming this is your function to get the model
+print(f"Raspberry Pi Model: {pi_model}")
+normalized_model = normalize_string(pi_model)
+
+if 'raspberry pi zero 2 w rev 10' in normalized_model:
+    buffer_count = 4
+else:
+    buffer_count = 8
+print(f"Allocating {buffer_count} buffers")
+
 picam2 = Picamera2()
 
 full_resolution = picam2.sensor_resolution
@@ -194,7 +210,7 @@ print(full_resolution)
 video_config = picam2.create_video_configuration(main={"size": full_resolution, "format": "RGB888"},
                                                  lores={"size": (640, 480)},
                                                  encode="lores",
-                                                 buffer_count=8)    # Need to decrease this to 2-3 in the raspberry pi
+                                                 buffer_count=buffer_count)    # Need to decrease this to 2-3 in the raspberry pi
                                                                     # zero 2 w to avoid running out of memory when using
                                                                     # the full sensor resolution, specially on the
                                                                     # camera module 3.
@@ -207,6 +223,34 @@ initial_controls = {
 }
 
 picam2.set_controls(initial_controls)
+
+CAM_MODULE_V = 2  # Indicates whether it is the cam module 1, 2, 3...
+
+# Assuming typical Raspberry Pi camera models
+if full_resolution == (4608, 2592):
+    print("Camera Module v3 detected")
+    CAM_MODULE_V = 3
+elif full_resolution == (3280, 2464):
+    print("Camera Module v2 detected")
+    CAM_MODULE_V = 2
+elif full_resolution == (2592, 1944):
+    print("Camera Module v1")
+    CAM_MODULE_V = 1
+elif full_resolution == (4056, 3040):
+    print("HQ Camera")
+else:
+    print("Unknown Camera Model")
+
+# Constants (in microseconds)
+if CAM_MODULE_V == 3:
+    MAX_EXPOSURE_TIME = int(1000000 * 112)  #112 seconds in total of max exposure
+elif CAM_MODULE_V == 2:
+    MAX_EXPOSURE_TIME = int(1000000 * 10)
+elif CAM_MODULE_V == 1:
+    MAX_EXPOSURE_TIME = int(1000000 * .9)
+MIN_EXPOSURE_TIME = 100000
+EXPOSURE_INCREMENT = 50000
+DEFAULT_EXPOSURE_TIME = 100000
 
 if ROTATE_180:
     video_config["transform"] = libcamera.Transform(hflip=1, vflip=1)
@@ -236,7 +280,7 @@ def send_video_frames():
                 client_socket.settimeout(30)
                 client_socket.connect((receiver_ip, VIDEO_PORT))
                 print("")
-                print(f"Connected to receiver at {receiver_ip}:{VIDEO_PORT}")
+                print(f"Connected to video receiver at {receiver_ip}:{VIDEO_PORT}")
 
                 while not shutdown_event.is_set():  # while True:
                     yuv420 = picam2.capture_array("lores")
@@ -580,20 +624,40 @@ def take_timed_picture(save_to_disk: bool = False):
         # Initialize a flag to check if the high-res picture was sent
         high_res_pic_sent = False
 
+        # Resolve domain name to IP address
+        if use_domain_name:
+            receiver_ip = socket.gethostbyname(domain_name)
+        else:
+            receiver_ip = ip_address
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as pic_socket:
                 if shutdown_event.is_set():
-                    print("shutdown_event triggered in save_pic_every_minute() (1)")
+                    print("shutdown_event triggered in take_timed_picture() (1)")
                     break
                 pic_socket.settimeout(30)  # Set a timeout for connection
                 pic_socket.connect((receiver_ip, HIGH_RES_PIC_PORT))
 
+                print("")
+                print(f"Connected to image receiver at {receiver_ip}:{HIGH_RES_PIC_PORT}")
+
                 # Send the picture
                 img_buffer.seek(0)  # Reset the buffer position to the start
                 pic_data = img_buffer.read()
+                print("High-resolution picture ready.")
                 pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
+
+                # total_length = len(pic_data)
+                # pic_socket.sendall(struct.pack("Q", total_length))
+                # # Send the picture in chunks
+                # chunk_size = 1024  # You can adjust this size
+                # for i in range(0, total_length, chunk_size):
+                #     pic_socket.sendall(pic_data[i:i + chunk_size])
+                # print("High-resolution picture sent.")
+                # high_res_pic_sent = True
+
 
         except TimeoutError as e:
             print(f"High-res picture connection timed out: {e}. Retrying...")
@@ -617,22 +681,69 @@ def take_timed_picture(save_to_disk: bool = False):
     print("save_pic_every_minute thread is shutting down")
 
 
-def send_sensor_data():
+def get_cpu_temp():
+    # For Raspberry Pi
+    try:
+        temp = subprocess.check_output(["vcgencmd", "measure_temp"]).decode()
+        return float(temp.replace("temp=", "").replace("'C\n", ""))
+    except:
+        return None
+
+
+def get_system_uptime():
+    try:
+        boot_time = datetime.fromtimestamp(psutil.boot_time())
+        now = datetime.now()
+        uptime = now - boot_time
+        return str(uptime)
+    except Exception as e:
+        print(f"Error getting system uptime: {e}")
+        return None
+
+
+def get_used_ram():
+    ram = psutil.virtual_memory()
+    return ram.used / (1024 ** 2)  # MB
+
+
+def get_used_disk():
+    disk = psutil.disk_usage('/')
+    return disk.used / (1024 ** 3)  # GB
+
+
+def send_data():
     while not shutdown_event.is_set():  # while True...
+
+        # Resolve domain name to IP address
+        if use_domain_name:
+            receiver_ip = socket.gethostbyname(domain_name)
+        else:
+            receiver_ip = ip_address
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
                 sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
 
+                print("")
+                print(f"Connected to data receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
+
                 while not shutdown_event.is_set():  # while True...
-                    sensor_data = read_sensor()
-                    sensor_socket.sendall(json.dumps(sensor_data).encode())
+                    send_data_dict = read_sensor()
+                    # Add additional data
+                    send_data_dict['cpu_temp'] = get_cpu_temp()
+                    send_data_dict['system_uptime'] = get_system_uptime()
+                    send_data_dict['used_ram'] = get_used_ram()
+                    send_data_dict['used_disk'] = get_used_disk()
+                    send_data_dict['datetime'] = datetime.now().isoformat()
+
+                    sensor_socket.sendall(json.dumps(send_data_dict).encode())
                     print("Sensor data sent...")
-                    print(sensor_data)
+                    print(send_data_dict)
                     for _ in range(SLEEP_TIME):  # Assuming you want to sleep for X seconds
                         time.sleep(1)
                         if shutdown_event.is_set():
-                            print("shutdown_event triggered in send_sensor_data() (1)")
+                            print("shutdown_event triggered in send_data() (1)")
                             break
 
         except TimeoutError as e:
@@ -666,16 +777,16 @@ if __name__ == '__main__':
     print(watchdog.name, " : watchdog thread started")
 
     # Start thread to send data
-    sensor_thread = Thread(target=send_sensor_data)
-    sensor_thread.daemon = True
-    sensor_thread.start()
-    print(sensor_thread.name, " : sensor_thread started")
+    send_data_thread = Thread(target=send_data)
+    send_data_thread.daemon = True
+    send_data_thread.start()
+    print(send_data_thread.name, " : sensor_thread started")
 
     # Start the thread to save pictures every minute
     thread = Thread(target=take_timed_picture, args=(SAVE_TO_DISK,))
     thread.daemon = True  # This ensures the thread will be stopped when the main program finishes
     thread.start()
-    print(thread.name, " : thread started")
+    print(thread.name, " : send_timed_image thread started")
 
     # Start thread to send video
     video_thread = Thread(target=send_video_frames)

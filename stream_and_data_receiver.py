@@ -1,3 +1,4 @@
+import csv
 from flask import Flask, Response, url_for, render_template
 import os
 import datetime
@@ -34,8 +35,11 @@ HIGH_RES_PIC_PORT = 5557
 
 # Global variables
 frame_queue = SingleItemQueue()
-sensor_data = {}
+received_data = {}
 lock = threading.Lock()
+
+# Define a path for the CSV file
+RECEIVED_DATA_FILE = 'received_data.csv'
 
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
@@ -74,20 +78,38 @@ def handle_video_stream(client_socket):
     finally:
         client_socket.close()
 
-def handle_sensor_data(client_socket):
-    global sensor_data
+
+def save_received_data_to_csv(data):
+    file_exists = os.path.isfile(RECEIVED_DATA_FILE)
+    with open(RECEIVED_DATA_FILE, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=data.keys())
+
+        if not file_exists:
+            writer.writeheader()  # Write the header only once
+
+        writer.writerow(data)
+        print("Received data appended to CSV file.")
+
+def handle_received_data(client_socket):
+    global received_data
     try:
         while True:
             data = client_socket.recv(1024).decode()
             if not data: break
-            sensor_data = json.loads(data)
-            temperature = sensor_data.get('temperature', 'N/A')
-            humidity = sensor_data.get('humidity', 'N/A')
+            received_data = json.loads(data)
+
+            # Save data to CSV
+            save_received_data_to_csv(received_data)
+
+            temperature = received_data.get('temperature', 'N/A')
+            humidity = received_data.get('humidity', 'N/A')
 
             temperature_str = "{:.2f}°C".format(temperature) if isinstance(temperature, (int, float)) else 'N/A'
             humidity_str = "{:.2f}%".format(humidity) if isinstance(humidity, (int, float)) else 'N/A'
 
             print("Temperature: {}, Humidity: {}".format(temperature_str, humidity_str))
+            print("ALL DATA:")
+            print(received_data)
     except Exception as e:
         print(f"Sensor data connection lost: {e}")
     finally:
@@ -184,8 +206,9 @@ def index():
     latest_image = get_latest_high_res_image()
     stream_url = url_for('video_feed')
     # Use global sensor data
-    global sensor_data
-    return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=sensor_data)
+    global received_data
+    # Todo: fix whenever there is no latest_image
+    return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=received_data)
 
 def generate_frames():
     while True:
@@ -204,14 +227,14 @@ def video_feed():
 
 @app.route('/sensor_data')
 def get_sensor_data():
-    global sensor_data
-    return json.dumps(sensor_data)
+    global received_data
+    return json.dumps(received_data)
 
 
 if __name__ == '__main__':
     # Start threads for handling connections
     threading.Thread(target=listen_for_connections, args=(VIDEO_STREAM_PORT, handle_video_stream)).start()
-    threading.Thread(target=listen_for_connections, args=(SENSOR_DATA_PORT, handle_sensor_data)).start()
+    threading.Thread(target=listen_for_connections, args=(SENSOR_DATA_PORT, handle_received_data)).start()
     threading.Thread(target=listen_for_connections, args=(HIGH_RES_PIC_PORT, handle_high_res_picture)).start()
 
     # IF on debug mode, things get messy with threads and they stop working properly.
