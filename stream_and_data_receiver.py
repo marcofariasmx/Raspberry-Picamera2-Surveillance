@@ -30,16 +30,13 @@ class SingleItemQueue:
 app = Flask(__name__)
 
 VIDEO_STREAM_PORT = 5555
-SENSOR_DATA_PORT = 5556
+DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
 # Global variables
 frame_queue = SingleItemQueue()
 received_data = {}
 lock = threading.Lock()
-
-# Define a path for the CSV file
-RECEIVED_DATA_FILE = 'received_data.csv'
 
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
@@ -79,16 +76,23 @@ def handle_video_stream(client_socket):
         client_socket.close()
 
 
-def save_received_data_to_csv(data):
-    file_exists = os.path.isfile(RECEIVED_DATA_FILE)
-    with open(RECEIVED_DATA_FILE, mode='a', newline='') as file:
+def save_received_data_to_csv(data, sender_id):
+    base_directory = "received_data"
+    sender_directory = os.path.join(base_directory, sender_id)
+    os.makedirs(sender_directory, exist_ok=True)  # Create the directory if it doesn't exist
+
+    # Path for the CSV file specific to the sender
+    received_data_file = os.path.join(sender_directory, "received_data.csv")
+
+    file_exists = os.path.isfile(received_data_file)
+    with open(received_data_file, mode='a', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=data.keys())
 
         if not file_exists:
             writer.writeheader()  # Write the header only once
 
         writer.writerow(data)
-        print("Received data appended to CSV file.")
+        print(f"Received data from {sender_id} appended to CSV file.")
 
 def handle_received_data(client_socket):
     global received_data
@@ -98,8 +102,11 @@ def handle_received_data(client_socket):
             if not data: break
             received_data = json.loads(data)
 
+            # Extract the sender's identifier
+            sender_id = received_data.pop('sender_id', 'Unknown')
+
             # Save data to CSV
-            save_received_data_to_csv(received_data)
+            save_received_data_to_csv(received_data, sender_id)
 
             temperature = received_data.get('temperature', 'N/A')
             humidity = received_data.get('humidity', 'N/A')
@@ -107,6 +114,7 @@ def handle_received_data(client_socket):
             temperature_str = "{:.2f}°C".format(temperature) if isinstance(temperature, (int, float)) else 'N/A'
             humidity_str = "{:.2f}%".format(humidity) if isinstance(humidity, (int, float)) else 'N/A'
 
+            print(f"Data received from {sender_id}:")
             print("Temperature: {}, Humidity: {}".format(temperature_str, humidity_str))
             print("ALL DATA:")
             print(received_data)
@@ -260,7 +268,7 @@ def get_sensor_data():
 if __name__ == '__main__':
     # Start threads for handling connections
     threading.Thread(target=listen_for_connections, args=(VIDEO_STREAM_PORT, handle_video_stream)).start()
-    threading.Thread(target=listen_for_connections, args=(SENSOR_DATA_PORT, handle_received_data)).start()
+    threading.Thread(target=listen_for_connections, args=(DATA_PORT, handle_received_data)).start()
     threading.Thread(target=listen_for_connections, args=(HIGH_RES_PIC_PORT, handle_high_res_picture)).start()
 
     # IF on debug mode, things get messy with threads and they stop working properly.

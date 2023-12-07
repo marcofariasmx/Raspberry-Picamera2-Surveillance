@@ -44,7 +44,7 @@ domain_name = 'marcofarias.com'
 ip_address = '192.168.100.10'
 receiver_ip = ''
 VIDEO_PORT = 5555
-SENSOR_DATA_PORT = 5556
+DATA_PORT = 5556
 HIGH_RES_PIC_PORT = 5557
 
 # Camera rotation if needed
@@ -733,10 +733,10 @@ def send_data():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
-                sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
+                sensor_socket.connect((receiver_ip, DATA_PORT))
 
                 print("")
-                print(f"Connected to data receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
+                print(f"Connected to data receiver at {receiver_ip}:{DATA_PORT}")
 
                 while not shutdown_event.is_set():  # while True...
                     send_data_dict = read_sensor()
@@ -746,6 +746,9 @@ def send_data():
                     send_data_dict['used_ram'] = get_used_ram()
                     send_data_dict['used_disk'] = get_used_disk()
                     send_data_dict['datetime'] = datetime.now().isoformat()
+
+                    # Include the sender's identifier
+                    send_data_dict['sender_id'] = sender_id
 
                     sensor_socket.sendall(json.dumps(send_data_dict).encode())
                     print("Sensor data sent...")
