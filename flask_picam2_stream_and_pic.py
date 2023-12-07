@@ -729,21 +729,21 @@ def send_data():
                 print(f"Connected to data receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
 
                 while not shutdown_event.is_set():  # while True...
-                    sensor_data = read_sensor()
+                    send_data_dict = read_sensor()
                     # Add additional data
-                    sensor_data['cpu_temp'] = get_cpu_temp()
-                    sensor_data['system_uptime'] = get_system_uptime()
-                    sensor_data['used_ram'] = get_used_ram()
-                    sensor_data['used_disk'] = get_used_disk()
-                    sensor_data['datetime'] = datetime.now().isoformat()
+                    send_data_dict['cpu_temp'] = get_cpu_temp()
+                    send_data_dict['system_uptime'] = get_system_uptime()
+                    send_data_dict['used_ram'] = get_used_ram()
+                    send_data_dict['used_disk'] = get_used_disk()
+                    send_data_dict['datetime'] = datetime.now().isoformat()
 
-                    sensor_socket.sendall(json.dumps(sensor_data).encode())
+                    sensor_socket.sendall(json.dumps(send_data_dict).encode())
                     print("Sensor data sent...")
-                    print(sensor_data)
+                    print(send_data_dict)
                     for _ in range(SLEEP_TIME):  # Assuming you want to sleep for X seconds
                         time.sleep(1)
                         if shutdown_event.is_set():
-                            print("shutdown_event triggered in send_sensor_data() (1)")
+                            print("shutdown_event triggered in send_data() (1)")
                             break
 
         except TimeoutError as e:
