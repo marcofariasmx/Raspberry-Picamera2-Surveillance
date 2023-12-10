@@ -312,10 +312,9 @@ def generate_frames_for_stream(stream_id):
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
 
-
 @app.route('/video_feed')
 def video_feed():
-    # Hardcoded for now
+    # Fixme: Hardcoded for now
     stream_id = 'cam1'
     return Response(generate_frames_for_stream(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
