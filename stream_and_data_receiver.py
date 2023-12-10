@@ -40,6 +40,7 @@ lock = threading.Lock()
 
 # Global dictionary to hold queues for each video stream
 video_stream_queues = {}
+selected_cam = list(video_stream_queues)[0]
 
 
 # Function to get or create a queue for a specific video stream
@@ -265,8 +266,9 @@ def get_latest_high_res_image():
         subdirectories = sorted([d for d in os.listdir(full_base_path) if os.path.isdir(os.path.join(full_base_path, d))])
         if subdirectories:
             # Select the first subdirectory alphabetically
-            first_subdirectory = subdirectories[0]
-            date_directory = os.path.join(first_subdirectory, current_date)
+            #selected_subdirectory = subdirectories[0]
+            selected_subdirectory = selected_cam
+            date_directory = os.path.join(selected_subdirectory, current_date)
             full_path = os.path.join(app.static_folder, base_directory, date_directory)
 
             if os.path.exists(full_path):
@@ -297,7 +299,6 @@ def index():
     stream_url = url_for('video_feed')
     # Use global sensor data
     global received_data
-    # Todo: fix whenever there is no latest_image
     return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=received_data)
 
 
@@ -315,12 +316,13 @@ def generate_frames_for_stream(stream_id):
 @app.route('/video_feed')
 def video_feed():
     # Fixme: Hardcoded for now
-    stream_id = list(video_stream_queues)[0]
+    stream_id = selected_cam
     return Response(generate_frames_for_stream(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/sensor_data')
 def get_sensor_data():
+    # Todo: handle separation of received data to show for each camera
     global received_data
     return json.dumps(received_data)
 
