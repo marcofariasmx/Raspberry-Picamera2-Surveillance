@@ -31,6 +31,11 @@ import libcamera
 
 from utils import WatchdogTimer, read_sensor
 
+try:
+    import sender_settings as settings
+except ImportError:
+    raise ImportError("Settings file not found. Please copy and modify 'sender_settings_template.py' as 'sender_settings.py'.")
+
 
 # Global shutdown event
 shutdown_event = Event()
@@ -39,22 +44,22 @@ shutdown_event = Event()
 app = Flask(__name__)
 
 # Connection parameters
-use_domain_name = True
-domain_name = 'marcofarias.com'
-ip_address = '192.168.100.10'
-receiver_ip = ''
-VIDEO_PORT = 5555
-DATA_PORT = 5556
-HIGH_RES_PIC_PORT = 5557
+use_domain_name = settings.use_domain_name
+domain_name = settings.domain_name
+ip_address = settings.ip_address
+receiver_ip = settings.receiver_ip
+VIDEO_PORT = settings.VIDEO_PORT
+DATA_PORT = settings.DATA_PORT
+HIGH_RES_PIC_PORT = settings.HIGH_RES_PIC_PORT
 
 # Camera rotation if needed
-ROTATE_180 = True
+ROTATE_180 = settings.ROTATE_180
 
 # Global variable to control saving automatically taken pictures to disk
-SAVE_TO_DISK = False
+SAVE_TO_DISK = settings.SAVE_TO_DISK
 
 # Sleep time (in seconds) between data reads and sending
-SLEEP_TIME = 30
+SLEEP_TIME = settings.SLEEP_TIME
 
 # Unique identifier for the sender
 sender_id = socket.gethostname()  # or any other unique identifier
