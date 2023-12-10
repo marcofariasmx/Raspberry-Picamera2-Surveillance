@@ -308,7 +308,7 @@ def generate_frames_for_stream(stream_id):
 @app.route('/video_feed')
 def video_feed():
     # Fixme: Hardcoded for now
-    stream_id = 'cam1'
+    stream_id = list(video_stream_queues)[0]
     return Response(generate_frames_for_stream(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
