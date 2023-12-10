@@ -41,7 +41,7 @@ lock = threading.Lock()
 # Global dictionary to hold queues for each video stream
 video_stream_queues = {}
 #selected_cam = list(video_stream_queues)[0]
-selected_cam = 'rancho_cam'
+selected_cam = 'rancho-cam'
 
 
 # Function to get or create a queue for a specific video stream
