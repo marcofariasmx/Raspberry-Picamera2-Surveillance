@@ -38,6 +38,16 @@ frame_queue = SingleItemQueue()
 received_data = {}
 lock = threading.Lock()
 
+# Global dictionary to hold queues for each video stream
+video_stream_queues = {}
+
+# Function to get or create a queue for a specific video stream
+def get_video_stream_queue(stream_id):
+    global video_stream_queues
+    if stream_id not in video_stream_queues:
+        video_stream_queues[stream_id] = SingleItemQueue()
+    return video_stream_queues[stream_id]
+
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
 if not os.path.exists(HIGH_RES_IMAGES_DIR):
@@ -48,27 +58,53 @@ def handle_video_stream(client_socket):
         payload_size = struct.calcsize("Q")
         data = b""
         while True:
+            # Receive the size of the sender's ID
             while len(data) < payload_size:
                 packet = client_socket.recv(4 * 1024)
                 if not packet: return
                 data += packet
 
-            packed_msg_size = data[:payload_size]
+            # Extract the size of the sender's ID
+            packed_id_size = data[:payload_size]
             data = data[payload_size:]
-            msg_size = struct.unpack("Q", packed_msg_size)[0]
+            id_size = struct.unpack("Q", packed_id_size)[0]
 
-            while len(data) < msg_size:
+            # Receive the sender's ID
+            while len(data) < id_size:
                 data += client_socket.recv(4 * 1024)
 
-            frame_data = data[:msg_size]
-            data = data[msg_size:]
+            # Extract the sender's ID
+            sender_id = data[:id_size].decode()
+            data = data[id_size:]
 
+            # Receive the size of the image
+            while len(data) < payload_size:
+                data += client_socket.recv(4 * 1024)
+
+            # Extract the size of the image
+            packed_img_size = data[:payload_size]
+            data = data[payload_size:]
+            img_size = struct.unpack("Q", packed_img_size)[0]
+
+            # Receive the image
+            while len(data) < img_size:
+                data += client_socket.recv(4 * 1024)
+
+            # Extract the image
+            frame_data = data[:img_size]
+            data = data[img_size:]
+
+            # Process and put the frame in the appropriate queue
             with lock:
                 frame = np.frombuffer(frame_data, dtype=np.uint8)
                 frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
 
                 if frame is not None:
-                    frame_queue.put(frame)
+                    # Check if a queue exists for this sender, if not, create one
+                    if sender_id not in video_stream_queues:
+                        video_stream_queues[sender_id] = SingleItemQueue()
+
+                    video_stream_queues[sender_id].put(frame)
 
     except Exception as e:
         print(f"Video stream connection lost: {e}")
@@ -244,19 +280,23 @@ def index():
     # Todo: fix whenever there is no latest_image
     return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=received_data)
 
-def generate_frames():
+def generate_frames_for_stream(stream_id):
     while True:
-        if not frame_queue.is_empty():
-            frame = frame_queue.get()
+        stream_queue = video_stream_queues.get(stream_id)
+        if stream_queue and not stream_queue.is_empty():
+            frame = stream_queue.get()
             ret, buffer = cv2.imencode('.jpg', frame)
             if ret:
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
 
+
 @app.route('/video_feed')
 def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    # Hardcoded for now
+    stream_id = 'cam1'
+    return Response(generate_frames_for_stream(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/sensor_data')

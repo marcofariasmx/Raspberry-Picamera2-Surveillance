@@ -291,7 +291,11 @@ def send_video_frames():
                     rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
                     _, buffer = cv2.imencode('.jpg', rgb)
                     frame = buffer.tobytes()
-                    client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+
+                    # Send the sender's ID and frame together
+                    message = struct.pack("Q", len(sender_id_encoded)) + sender_id_encoded
+                    message += struct.pack("Q", len(frame)) + frame
+                    client_socket.sendall(message)
 
                     if shutdown_event.is_set():
                         print("shutdown_event triggered in send_video_frames() (1)")
