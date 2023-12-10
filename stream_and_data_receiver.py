@@ -251,15 +251,29 @@ def listen_for_connections(port, handler):
 
 def get_latest_high_res_image():
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    date_directory = os.path.join('high_res_images', current_date)  # Relative path from the static directory
-    full_path = os.path.join(app.static_folder, date_directory)
-    if os.path.exists(full_path):
-        files = sorted([f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))], key=lambda x: os.path.getmtime(os.path.join(full_path, x)), reverse=True)
-        if files:
-            # Replace backslashes with forward slashes for web compatibility
-            return os.path.join(date_directory, files[0]).replace('\\', '/')  # Return the relative path
-    return None
+    base_directory = os.path.join('high_res_images')
+    full_base_path = os.path.join(app.static_folder, base_directory)
 
+    if os.path.exists(full_base_path):
+        # List and sort subdirectories alphabetically
+        subdirectories = sorted([d for d in os.listdir(full_base_path) if os.path.isdir(os.path.join(full_base_path, d))])
+        if subdirectories:
+            # Select the first subdirectory alphabetically
+            first_subdirectory = subdirectories[0]
+            date_directory = os.path.join(first_subdirectory, current_date)
+            full_path = os.path.join(app.static_folder, base_directory, date_directory)
+
+            if os.path.exists(full_path):
+                # List files in the date directory
+                files = sorted([f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))], key=lambda x: os.path.getmtime(os.path.join(full_path, x)), reverse=True)
+                if files:
+                    # Construct the relative path to the file
+                    relative_path = os.path.join(base_directory, date_directory, files[0]).replace('\\', '/')
+
+                    return relative_path
+
+    #return os.path.join(app.static_folder, 'no-image-available.jpg').replace('\\', '/')
+    return 'no-image-available.jpg'
 
 @app.route('/latest_image_url')
 def latest_image_url():
