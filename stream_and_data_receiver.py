@@ -41,6 +41,7 @@ lock = threading.Lock()
 # Global dictionary to hold queues for each video stream
 video_stream_queues = {}
 
+
 # Function to get or create a queue for a specific video stream
 def get_video_stream_queue(stream_id):
     global video_stream_queues
@@ -48,10 +49,12 @@ def get_video_stream_queue(stream_id):
         video_stream_queues[stream_id] = SingleItemQueue()
     return video_stream_queues[stream_id]
 
+
 # Directory to save high-resolution images
 HIGH_RES_IMAGES_DIR = os.path.join(app.static_folder, 'high_res_images')
 if not os.path.exists(HIGH_RES_IMAGES_DIR):
     os.makedirs(HIGH_RES_IMAGES_DIR)
+
 
 def handle_video_stream(client_socket):
     try:
@@ -130,6 +133,7 @@ def save_received_data_to_csv(data, sender_id):
         writer.writerow(data)
         print(f"Received data from {sender_id} appended to CSV file.")
 
+
 def handle_received_data(client_socket):
     global received_data
     try:
@@ -158,6 +162,7 @@ def handle_received_data(client_socket):
         print(f"Sensor data connection lost: {e}")
     finally:
         client_socket.close()
+
 
 def handle_high_res_picture(client_socket):
     try:
@@ -228,6 +233,7 @@ def handle_high_res_picture(client_socket):
     finally:
         client_socket.close()
 
+
 def listen_for_connections(port, handler):
     while True:
         try:
@@ -275,6 +281,7 @@ def get_latest_high_res_image():
     #return os.path.join(app.static_folder, 'no-image-available.jpg').replace('\\', '/')
     return 'no-image-available.jpg'
 
+
 @app.route('/latest_image_url')
 def latest_image_url():
     latest_image = get_latest_high_res_image()  # This function returns the latest image's relative path
@@ -282,7 +289,6 @@ def latest_image_url():
         return url_for('static', filename=latest_image)
     else:
         return ''  # Return an empty string or a default image path if no image is found
-
 
 
 @app.route('/')
@@ -293,6 +299,7 @@ def index():
     global received_data
     # Todo: fix whenever there is no latest_image
     return render_template('receiver_index.html', stream_url=stream_url, latest_image=latest_image, sensor_data=received_data)
+
 
 def generate_frames_for_stream(stream_id):
     while True:
