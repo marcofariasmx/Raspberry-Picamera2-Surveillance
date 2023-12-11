@@ -792,7 +792,7 @@ def send_data():
 
 if __name__ == '__main__':
     # Watchdog start
-    watchdog_timeout = 60 * 3  # in seconds, adjust as needed
+    watchdog_timeout = settings.watchdog_timeout
     watchdog = WatchdogTimer(watchdog_timeout, reset_callback=shutdown_server, shutdown_event=shutdown_event)
     watchdog.daemon = True
     watchdog.start()

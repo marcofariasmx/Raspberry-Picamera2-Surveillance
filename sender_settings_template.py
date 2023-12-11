@@ -17,3 +17,6 @@ SAVE_TO_DISK = False  # Set to True to save pictures to disk
 
 # Sleep time (in seconds) between data reads and sending
 SLEEP_TIME = 30  # Adjust sleep time as needed
+
+# Watchdog timeout
+watchdog_timeout = 60 * 5  # in seconds, adjust as needed
