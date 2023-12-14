@@ -31,6 +31,11 @@ import libcamera
 
 from utils import WatchdogTimer, read_sensor
 
+try:
+    import sender_settings as settings
+except ImportError:
+    raise ImportError("Settings file not found. Please copy and modify 'sender_settings_template.py' as 'sender_settings.py'.")
+
 
 # Global shutdown event
 shutdown_event = Event()
@@ -39,22 +44,26 @@ shutdown_event = Event()
 app = Flask(__name__)
 
 # Connection parameters
-use_domain_name = True
-domain_name = 'marcofarias.com'
-ip_address = '192.168.100.10'
-receiver_ip = ''
-VIDEO_PORT = 5555
-SENSOR_DATA_PORT = 5556
-HIGH_RES_PIC_PORT = 5557
+use_domain_name = settings.use_domain_name
+domain_name = settings.domain_name
+ip_address = settings.ip_address
+receiver_ip = settings.receiver_ip
+VIDEO_PORT = settings.VIDEO_PORT
+DATA_PORT = settings.DATA_PORT
+HIGH_RES_PIC_PORT = settings.HIGH_RES_PIC_PORT
 
 # Camera rotation if needed
-ROTATE_180 = True
+ROTATE_180 = settings.ROTATE_180
 
 # Global variable to control saving automatically taken pictures to disk
-SAVE_TO_DISK = False
+SAVE_TO_DISK = settings.SAVE_TO_DISK
 
 # Sleep time (in seconds) between data reads and sending
-SLEEP_TIME = 30
+SLEEP_TIME = settings.SLEEP_TIME
+
+# Unique identifier for the sender
+sender_id = socket.gethostname()  # or any other unique identifier
+sender_id_encoded = sender_id.encode()
 
 
 def shutdown_server():
@@ -287,7 +296,11 @@ def send_video_frames():
                     rgb = cv2.cvtColor(yuv420, cv2.COLOR_YUV2RGB_YV12)
                     _, buffer = cv2.imencode('.jpg', rgb)
                     frame = buffer.tobytes()
-                    client_socket.sendall(struct.pack("Q", len(frame)) + frame)
+
+                    # Send the sender's ID and frame together
+                    message = struct.pack("Q", len(sender_id_encoded)) + sender_id_encoded
+                    message += struct.pack("Q", len(frame)) + frame
+                    client_socket.sendall(message)
 
                     if shutdown_event.is_set():
                         print("shutdown_event triggered in send_video_frames() (1)")
@@ -645,7 +658,13 @@ def take_timed_picture(save_to_disk: bool = False):
                 img_buffer.seek(0)  # Reset the buffer position to the start
                 pic_data = img_buffer.read()
                 print("High-resolution picture ready.")
-                pic_socket.sendall(struct.pack("Q", len(pic_data)) + pic_data)
+
+                # Combine ID and picture into a single message
+                message = struct.pack("Q", len(sender_id_encoded)) + sender_id_encoded
+                message += struct.pack("Q", len(pic_data)) + pic_data
+
+                # Send the combined message
+                pic_socket.sendall(message)
                 print("High-resolution picture sent.")
                 high_res_pic_sent = True
 
@@ -723,10 +742,10 @@ def send_data():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sensor_socket:
                 sensor_socket.settimeout(30)  # Set a timeout for the connection, time in seconds
-                sensor_socket.connect((receiver_ip, SENSOR_DATA_PORT))
+                sensor_socket.connect((receiver_ip, DATA_PORT))
 
                 print("")
-                print(f"Connected to data receiver at {receiver_ip}:{SENSOR_DATA_PORT}")
+                print(f"Connected to data receiver at {receiver_ip}:{DATA_PORT}")
 
                 while not shutdown_event.is_set():  # while True...
                     send_data_dict = read_sensor()
@@ -736,6 +755,9 @@ def send_data():
                     send_data_dict['used_ram'] = get_used_ram()
                     send_data_dict['used_disk'] = get_used_disk()
                     send_data_dict['datetime'] = datetime.now().isoformat()
+
+                    # Include the sender's identifier
+                    send_data_dict['sender_id'] = sender_id
 
                     sensor_socket.sendall(json.dumps(send_data_dict).encode())
                     print("Sensor data sent...")
@@ -770,7 +792,7 @@ def send_data():
 
 if __name__ == '__main__':
     # Watchdog start
-    watchdog_timeout = 60 * 3  # in seconds, adjust as needed
+    watchdog_timeout = settings.watchdog_timeout
     watchdog = WatchdogTimer(watchdog_timeout, reset_callback=shutdown_server, shutdown_event=shutdown_event)
     watchdog.daemon = True
     watchdog.start()
