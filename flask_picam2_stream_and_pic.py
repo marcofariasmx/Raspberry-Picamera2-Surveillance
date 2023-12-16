@@ -788,6 +788,7 @@ def send_data():
             break
 
     print("send_sensor_data thread is shutting down")
+    # Todo: check why it does not reestablishes connection after it is lost.
 
 
 if __name__ == '__main__':
